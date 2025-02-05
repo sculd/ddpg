@@ -27,6 +27,12 @@ For `LunarLander-v3` env,
 The lines with low values which do not improve over time use the constant 0.20 sigma value.
 The gren one which improves over time use the idea of decaying sigma.
 
+## Example
+DDPG vs. DUPG
+
+<img src="images/animation_ddpg.gif" width="50%" height="50%">
+
+<img src="images/animation_dupg.gif" width="50%" height="50%">
 
 ## Batchsize
 As suggested in `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/abs/1509.02971), a smaller batch size of 16 was used, instead of the 64 which the original paper proposed.
