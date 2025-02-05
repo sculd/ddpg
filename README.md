@@ -1,6 +1,8 @@
-# DDPG
+# DUPG - Improved DDPG
 
 DDPG = Deep Deterministic Policy Gradient
+
+DUPG = Deep Undeterministic Policy Gradient
 
 This is an implementation of [DDPG](https://arxiv.org/abs/1509.02971) paper.
 
