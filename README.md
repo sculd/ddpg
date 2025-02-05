@@ -27,10 +27,14 @@ For `LunarLander-v3` env,
 The lines with low values which do not improve over time use the constant 0.20 sigma value.
 The gren one which improves over time use the idea of decaying sigma.
 
-## Example
-DDPG vs. DUPG
+## Example - DDPG vs. DUPG
+DDPG
 
 <img src="images/animation_ddpg.gif" width="50%" height="50%">
+
+Note that this type of jump-once-and-not-doing-anything-aferwards move happens repeated over episodes, suggesting the weekness in the exploration behavior.
+
+DUPG
 
 <img src="images/animation_dupg.gif" width="50%" height="50%">
 
