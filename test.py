@@ -4,10 +4,10 @@ import numpy as np
 from ddpg.agent import Agent
 
 
-env_name = "LunarLander-v3"
-env_param = {"continuous": True}
-#env_name = "BipedalWalker-v3"
-#env_param = {}
+#env_name = "LunarLander-v3"
+#env_param = {"continuous": True}
+env_name = "BipedalWalker-v3"
+env_param = {}
 
 env = gym.make(env_name, render_mode="human", **env_param)
 np.random.seed(int(datetime.datetime.now().timestamp()))

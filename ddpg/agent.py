@@ -1,5 +1,5 @@
 import numpy as np
-import torch as T
+import torch
 import torch.nn.functional as F
 
 from ddpg.network import ActorNetwork, CriticNetwork
@@ -7,6 +7,8 @@ from ddpg.noise_injector import OrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
 
 
+# Use cuda if available else use cpu
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 UPDATE_EVERY = 1
 
 
@@ -42,11 +44,11 @@ class Agent:
 
     def choose_action(self, observation, with_noise=True):
         self.actor.eval()
-        observation = T.tensor(observation, dtype=T.float).to(self.actor.device)
-        mu = self.actor(observation).to(self.actor.device)
+        observation = torch.tensor(observation, dtype=torch.float).to(device)
+        mu = self.actor(observation).to(device)
         if with_noise:
-            mu = mu + T.tensor(self.noise(), dtype=T.float).to(self.actor.device)
-            mu = T.clip(mu, min=-1, max=+1).to(self.actor.device)
+            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(device)
+            mu = torch.clip(mu, min=-1, max=+1).to(device)
         self.actor.train()
         return mu.cpu().detach().numpy()
 
@@ -92,7 +94,7 @@ class Agent:
         mu = self.actor.forward(states)
         actor_q = self.critic.forward(states, mu)
         # negative sign to maximize q
-        actor_loss = T.mean(-actor_q)
+        actor_loss = torch.mean(-actor_q)
         actor_loss.backward()
         self.actor.optimizer.step()
 

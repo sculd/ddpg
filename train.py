@@ -6,10 +6,10 @@ from ddpg.agent import Agent
 import wandb
 
 
-env_name = "LunarLander-v3"
-env_param = {"continuous": True}
-#env_name = "BipedalWalker-v3"
-#env_param = {}
+#env_name = "LunarLander-v3"
+#env_param = {"continuous": True}
+env_name = "BipedalWalker-v3"
+env_param = {}
 
 wandb.init(
     # set the wandb project where this run will be logged
