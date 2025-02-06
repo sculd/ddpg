@@ -33,7 +33,7 @@ DDPG
 
 <img src="images/animation_ddpg.gif" width="50%" height="50%">
 
-Note that this type of jump-once-and-not-doing-anything-aferwards move happens repeated over episodes, suggesting the weekness in the exploration behavior.
+Note that this type of jump-and-freeze move happens repeated over episodes, suggesting the weekness in the exploration behavior.
 
 DUPG
 
