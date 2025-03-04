@@ -6,14 +6,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import util.device
 
 _snapshot_dir = "snapshot"
 
 if not os.path.exists(_snapshot_dir):
     pathlib.Path(_snapshot_dir).mkdir(parents=True, exist_ok=True)
-
-# Use cuda if available else use cpu
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 def _init_uniform(layer, f=None):
@@ -62,7 +60,7 @@ class ActorNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.mu, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        self.to(device)
+        self.to(util.device.device)
 
     def forward(self, state):
         x = self.fc1(state)
@@ -102,7 +100,7 @@ class CriticNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.q, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        self.to(device)
+        self.to(util.device.device)
 
     def forward(self, state, action): # notice that critic takes both state and action.
         state_value = state

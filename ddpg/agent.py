@@ -5,10 +5,8 @@ import torch.nn.functional as F
 from ddpg.network import ActorNetwork, CriticNetwork
 from ddpg.noise_injector import OrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
+import util.device
 
-
-# Use cuda if available else use cpu
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 UPDATE_EVERY = 1
 
 
@@ -17,8 +15,8 @@ class Agent:
                  n_inputs, 
                  n_actions, 
                  env_name, 
-                 lr_actor=0.001, 
-                 lr_critic=0.001,
+                 lr_actor=1e-3, 
+                 lr_critic=1e-3,
                  tau=0.001, 
                  gamma=0.99, 
                  replay_buffer_size=10**6, 
@@ -26,12 +24,13 @@ class Agent:
                  layer2_size=300, 
                  batch_size=16, 
                  noise_sigma=0.5,
-                 toggle_sigma_decay=True,
+                 noise_sigma_final=0.2,
+                 noise_sigma_decay=0.001,
                  ):
         self.gamma = gamma
         self.tau = tau
-        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(n_actions), sigma=noise_sigma, toggle_sigma_decay=toggle_sigma_decay)
-        self.memory = ReplayBuffer(replay_buffer_size)
+        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(n_actions), sigma=noise_sigma, sigma_final=noise_sigma_final, sigma_decay=noise_sigma_decay)
+        self.memory = ReplayBuffer(env_name, replay_buffer_size)
         self.batch_size = batch_size
 
         self.actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Actor')
@@ -44,11 +43,11 @@ class Agent:
 
     def choose_action(self, observation, with_noise=True):
         self.actor.eval()
-        observation = torch.tensor(observation, dtype=torch.float).to(device)
-        mu = self.actor(observation).to(device)
+        observation = torch.tensor(observation, dtype=torch.float).to(util.device.device)
+        mu = self.actor(observation).to(util.device.device)
         if with_noise:
-            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(device)
-            mu = torch.clip(mu, min=-1, max=+1).to(device)
+            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(util.device.device)
+            mu = torch.clip(mu, min=-1, max=+1).to(util.device.device)
         self.actor.train()
         return mu.cpu().detach().numpy()
 
@@ -112,14 +111,21 @@ class Agent:
         self._update_target_network(tau, self.critic, self.target_critic)
         self._update_target_network(tau, self.actor, self.target_actor)
 
-    def save_models(self):
+    def save(self):
+        #'''
         self.actor.save_checkpoint()
         self.critic.save_checkpoint()
         self.target_actor.save_checkpoint()
         self.target_critic.save_checkpoint()
+        self.memory.save()
+        #'''
 
-    def load_models(self):
+    def load(self, load_memory=True):
+        #'''
         self.actor.load_checkpoint()
         self.critic.load_checkpoint()
         self.target_actor.load_checkpoint()
         self.target_critic.load_checkpoint()
+        if load_memory:
+            self.memory.load()
+        #'''
