@@ -48,7 +48,6 @@ class AgentHer(Agent):
             noise_sigma=noise_sigma,
             noise_sigma_final=noise_sigma_final,
             noise_sigma_decay=noise_sigma_decay,
-            toggle_sigma_decay=toggle_sigma_decay,
         )
         self.env = env
         self.memory_her = ReplayBuffer(replay_buffer_size)
