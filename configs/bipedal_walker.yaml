@@ -1,0 +1,35 @@
+# Configuration for BipedalWalker-v3 environment
+env: "BipedalWalker-v3"
+env_params: {}
+
+# Training parameters
+episodes: 4000
+max_steps: 500
+target_score: 240
+save_interval: 50
+
+# Agent hyperparameters
+lr_actor: 0.001
+lr_critic: 0.001
+batch_size: 16
+buffer_size: 1000000
+gamma: 0.99
+tau: 0.001
+
+# Noise parameters
+noise_sigma: 0.2
+noise_sigma_final: 0.2
+noise_sigma_decay: 0.001
+
+# Logging
+wandb: true
+wandb_project: "BipedalWalker-v3-Continuous"
+
+# Testing parameters
+test_episodes: 100
+render: true
+record: false
+video_folder: "./images"
+video_freq: 10
+with_noise: false
+score_threshold: 200
