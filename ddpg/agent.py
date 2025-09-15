@@ -44,10 +44,10 @@ class Agent:
     def choose_action(self, observation, with_noise=True):
         self.actor.eval()
         observation = torch.tensor(observation, dtype=torch.float).to(ddpg.util.device.device)
-        mu = self.actor(observation).to(ddpg.util.device.device)
+        mu = self.actor(observation)
         if with_noise:
             mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(ddpg.util.device.device)
-            mu = torch.clip(mu, min=-1, max=+1).to(ddpg.util.device.device)
+            mu = torch.clip(mu, min=-1, max=+1)
         self.actor.train()
         return mu.cpu().detach().numpy()
 

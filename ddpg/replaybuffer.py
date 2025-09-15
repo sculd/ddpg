@@ -1,6 +1,8 @@
 import numpy as np
 import random
 import torch
+import pickle
+import os
 from collections import deque, namedtuple
 import ddpg.util.device
 
@@ -50,3 +52,39 @@ class ReplayBuffer:
 
     def extend(self, other_buffer):
         self.memory.extend(other_buffer.memory)
+
+    def save(self, path=None):
+        if path is None:
+            path = f"snapshot/{self.env_name}_replay_buffer.pkl"
+
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # Save the memory buffer
+        with open(path, 'wb') as f:
+            pickle.dump({
+                'memory': list(self.memory),
+                'capacity': self.capacity,
+                'env_name': self.env_name
+            }, f)
+        print(f"Replay buffer saved ({path})")
+
+    def load(self, path=None):
+        if path is None:
+            path = f"snapshot/{self.env_name}_replay_buffer.pkl"
+
+        if not os.path.exists(path):
+            print(f"Replay buffer file ({path}) does not exist.")
+            return
+
+        # Load the memory buffer
+        with open(path, 'rb') as f:
+            data = pickle.load(f)
+            self.memory = deque(data['memory'], maxlen=self.capacity)
+            # Verify capacity and env_name match
+            if data['capacity'] != self.capacity:
+                print(f"Warning: Loaded buffer capacity ({data['capacity']}) differs from current capacity ({self.capacity})")
+            if data['env_name'] != self.env_name:
+                print(f"Warning: Loaded buffer env_name ({data['env_name']}) differs from current env_name ({self.env_name})")
+
+        print(f"Replay buffer loaded ({path}), {len(self.memory)} experiences")

@@ -44,7 +44,7 @@ class ActorNetwork(nn.Module, _SaveLoader):
         _SaveLoader.__init__(self, name)
 
         self.seed = torch.manual_seed(int(datetime.datetime.now().timestamp()))
-        self.checkpoint_file = os.path.join(_snapshot_dir, f"{name}_checkpoint")
+        self.checkpoint_file = os.path.join(_snapshot_dir, f"{name}_actor_checkpoint")
 
         self.fc1 = nn.Linear(n_inputs, fc1_dims)
         _init_uniform(self.fc1)
@@ -84,7 +84,7 @@ class CriticNetwork(nn.Module, _SaveLoader):
         _SaveLoader.__init__(self, name)
 
         self.seed = torch.manual_seed(int(datetime.datetime.now().timestamp()))
-        self.checkpoint_file = os.path.join(_snapshot_dir, f"{name}_checkpoint")
+        self.checkpoint_file = os.path.join(_snapshot_dir, f"{name}_critic_checkpoint")
 
         self.fc1 = nn.Linear(n_inputs + n_actions, fc1_dims)
         _init_uniform(self.fc1)
