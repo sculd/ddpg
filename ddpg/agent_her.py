@@ -29,6 +29,8 @@ class AgentHer(Agent):
                  layer2_size=300, 
                  batch_size=16, 
                  noise_sigma=0.5,
+                 noise_sigma_final=0.2,
+                 noise_sigma_decay=0.001,
                  toggle_sigma_decay=True,
                  ):
         super(AgentHer, self).__init__(
@@ -44,6 +46,8 @@ class AgentHer(Agent):
             layer2_size=layer2_size, 
             batch_size=batch_size,
             noise_sigma=noise_sigma,
+            noise_sigma_final=noise_sigma_final,
+            noise_sigma_decay=noise_sigma_decay,
             toggle_sigma_decay=toggle_sigma_decay,
         )
         self.env = env
