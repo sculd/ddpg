@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from ddpg.network import ActorNetwork, CriticNetwork
 from ddpg.noise_injector import OrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
-import util.device
+import ddpg.util.device
 
 UPDATE_EVERY = 1
 
@@ -33,28 +33,28 @@ class Agent:
         self.memory = ReplayBuffer(env_name, replay_buffer_size)
         self.batch_size = batch_size
 
-        self.actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Actor')
-        self.target_actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetActor')
-        self.critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Critic')
-        self.target_critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetCritic')
+        self.actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Actor').to(ddpg.util.device.device)
+        self.target_actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetActor').to(ddpg.util.device.device)
+        self.critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Critic').to(ddpg.util.device.device)
+        self.target_critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetCritic').to(ddpg.util.device.device)
 
         self.update_network_parameters(tau=1)
         self.timestep = 0
 
     def choose_action(self, observation, with_noise=True):
         self.actor.eval()
-        observation = torch.tensor(observation, dtype=torch.float).to(util.device.device)
-        mu = self.actor(observation).to(util.device.device)
+        observation = torch.tensor(observation, dtype=torch.float).to(ddpg.util.device.device)
+        mu = self.actor(observation).to(ddpg.util.device.device)
         if with_noise:
-            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(util.device.device)
-            mu = torch.clip(mu, min=-1, max=+1).to(util.device.device)
+            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(ddpg.util.device.device)
+            mu = torch.clip(mu, min=-1, max=+1).to(ddpg.util.device.device)
         self.actor.train()
         return mu.cpu().detach().numpy()
 
     def step(self, state, action, reward, next_state, done):
         self.memory.push(state, action, reward, next_state, done)
         self.timestep += 1
-        if self.timestep % UPDATE_EVERY == 0 and self.memory.total_count > self.batch_size:
+        if self.timestep % UPDATE_EVERY == 0 and self.memory.total_count() > self.batch_size:
             sampled_experiences = self.memory.sample(self.batch_size)
             self.learn(sampled_experiences)
     
@@ -65,7 +65,7 @@ class Agent:
         self._update_actor_network_parameters(self.tau)
 
     def learn_critic(self, experiences):
-        states, actions, rewards, next_states, dones = experiences
+        states, goals, actions, rewards, next_states, dones = experiences
 
         self.target_actor.eval()
         self.target_critic.eval()
@@ -85,7 +85,7 @@ class Agent:
         self.critic.optimizer.step()
 
     def learn_actor(self, experiences):
-        states, actions, rewards, next_states, dones = experiences
+        states, goals, actions, rewards, next_states, dones = experiences
 
         self.critic.eval()  # freeze it for actor update
         self.actor.train()

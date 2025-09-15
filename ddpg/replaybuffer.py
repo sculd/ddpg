@@ -2,16 +2,18 @@ import numpy as np
 import random
 import torch
 from collections import deque, namedtuple
+import ddpg.util.device
 
-# Use cuda if available else use cpu
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# Use the same device as defined in util/device.py
+device = ddpg.util.device.device
 
 Experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
 ExperienceWithGoal = namedtuple("ExperienceWithGoal", field_names=["state", "goal", "action", "reward", "next_state", "done"])
 
 class ReplayBuffer:
 
-    def __init__(self, capacity):
+    def __init__(self, env_name, capacity):
+        self.env_name = env_name
         self.capacity = capacity
 
         self.memory = deque(maxlen=self.capacity)

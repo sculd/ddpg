@@ -5,9 +5,14 @@ from collections import deque
 from ddpg.agent import Agent
 import wandb
 
-
+'''
+lr_actor=1e-3
+lr_critic=1e-3
+achieves avg score > 240 for lunar lander around 3k episodes.
+'''
 #env_name = "LunarLander-v3"
 #env_param = {"continuous": True}
+#env_name = "Pusher-v5"
 env_name = "BipedalWalker-v3"
 env_param = {}
 
@@ -19,23 +24,26 @@ wandb.init(
 env = gym.make(env_name, render_mode=None, **env_param)
 np.random.seed(int(datetime.datetime.now().timestamp()))
 
+tag = ""
 agent = Agent(n_inputs=env.observation_space.shape[0], n_actions=env.action_space.shape[0], env_name=env_name,
-              noise_sigma=0.2,
-              toggle_sigma_decay=False)
-agent.load_models()
+              noise_sigma=0.2, noise_sigma_final=0.2, noise_sigma_decay=1./1000)
+#agent.load()
 
-max_episodes = 1000
-max_steps = 1000
+max_episodes = 4000
+max_steps = 500
+total_steps = 0
 save_interval = 50
+reset_sigma_interval = 1000
 scores_window = deque(maxlen=save_interval)
 max_avg_score = 0
 
 for episode in range(1, max_episodes + 1):
-    done = False
+    done, truncated = False, False
     score = 0
     obs, _ = env.reset()
 
     for t in range(max_steps):
+        total_steps += 1
         if done:
             break
         act = agent.choose_action(obs)
@@ -50,26 +58,27 @@ for episode in range(1, max_episodes + 1):
     if avg_score > max_avg_score:
         max_avg_score = avg_score
 
-    wandb.log({"score": score, "mean_score": avg_score})
+    wandb.log({"score": score, "mean_score": avg_score, "sigma": agent.noise.sigma})
+    agent.noise.decay_sigma()
+     
     if episode % 10 == 0:
-        print(f'{episode=}, {score=}, mean_score: {avg_score}', end="\r")
+        print(f'{episode=}, {total_steps=} (avg steps per episode: {total_steps/episode:.1f}), {score=:.1f}, mean_score: {avg_score:.1f}', end="\r")
 
-    if score >= 1000:
+    if avg_score >= 240:
         print(f'Environment solved in {episode} episodes, average score {avg_score}', end="\r")
-        agent.save_models()
+        agent.save()
         break
 
     if episode % save_interval == 0:
         if max_avg_score > 100:
             if avg_score > 100:
                 print(f"{episode=}")
-                agent.save_models()
+                agent.save()
             else:
                 print(f"{avg_score} is not high enough thus skip saving.")
         else:
             print(f"{episode=}")
-            agent.save_models()
+            agent.save()
 
-agent.update_network_parameters(tau=0.1)
-agent.save_models()
+agent.save()
 env.close()

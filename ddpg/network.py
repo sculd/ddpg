@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import util.device
+import ddpg.util.device
 
 _snapshot_dir = "snapshot"
 
@@ -60,7 +60,7 @@ class ActorNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.mu, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        self.to(util.device.device)
+        self.to(ddpg.util.device.device)
 
     def forward(self, state):
         x = self.fc1(state)
@@ -100,7 +100,7 @@ class CriticNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.q, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-        self.to(util.device.device)
+        self.to(ddpg.util.device.device)
 
     def forward(self, state, action): # notice that critic takes both state and action.
         state_value = state
