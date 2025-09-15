@@ -1,6 +1,7 @@
 # Configuration for BipedalWalker-v3 environment
 env: "BipedalWalker-v3"
 env_params: {}
+agent_type: "agent"  # Options: "agent", "agent_her"
 
 # Training parameters
 episodes: 4000

@@ -2,8 +2,8 @@ import datetime
 import gymnasium as gym
 import numpy as np
 import argparse
-from ddpg.agent import Agent
 from ddpg.util.config import load_config
+from ddpg.util.agent_factory import create_agent
 
 
 def parse_args():
@@ -74,11 +74,19 @@ def main():
     np.random.seed(seed)
 
     # Create and load agent
-    agent = Agent(n_inputs=env.observation_space.shape[0],
-                  n_actions=env.action_space.shape[0],
-                  env_name=config['env'],
-                  noise_sigma=config.get('noise_sigma', 0.1),
-                  noise_sigma_final=config.get('noise_sigma', 0.1))
+    agent_params = {
+        'n_inputs': env.observation_space.shape[0],
+        'n_actions': env.action_space.shape[0],
+        'env_name': config['env'],
+        'noise_sigma': config.get('noise_sigma', 0.1),
+        'noise_sigma_final': config.get('noise_sigma', 0.1)
+    }
+
+    agent = create_agent(
+        agent_type=config.get('agent_type', 'agent'),
+        env=env if config.get('agent_type') == 'agent_her' else None,
+        **agent_params
+    )
     agent.load(load_memory=config.get('load_memory', False))
 
     max_episodes = config['episodes']

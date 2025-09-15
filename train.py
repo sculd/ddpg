@@ -3,8 +3,8 @@ import gymnasium as gym
 import numpy as np
 import argparse
 from collections import deque
-from ddpg.agent import Agent
 from ddpg.util.config import load_config, merge_with_args
+from ddpg.util.agent_factory import create_agent
 import wandb
 import yaml
 
@@ -72,18 +72,26 @@ def main():
     np.random.seed(seed)
 
     # Create agent with configurable parameters
-    agent = Agent(n_inputs=env.observation_space.shape[0],
-                  n_actions=env.action_space.shape[0],
-                  env_name=config['env'],
-                  lr_actor=config['lr_actor'],
-                  lr_critic=config['lr_critic'],
-                  tau=config['tau'],
-                  gamma=config['gamma'],
-                  replay_buffer_size=config['buffer_size'],
-                  batch_size=config['batch_size'],
-                  noise_sigma=config['noise_sigma'],
-                  noise_sigma_final=config['noise_sigma_final'],
-                  noise_sigma_decay=config['noise_sigma_decay'])
+    agent_params = {
+        'n_inputs': env.observation_space.shape[0],
+        'n_actions': env.action_space.shape[0],
+        'env_name': config['env'],
+        'lr_actor': config['lr_actor'],
+        'lr_critic': config['lr_critic'],
+        'tau': config['tau'],
+        'gamma': config['gamma'],
+        'replay_buffer_size': config['buffer_size'],
+        'batch_size': config['batch_size'],
+        'noise_sigma': config['noise_sigma'],
+        'noise_sigma_final': config['noise_sigma_final'],
+        'noise_sigma_decay': config['noise_sigma_decay']
+    }
+
+    agent = create_agent(
+        agent_type=config.get('agent_type', 'agent'),
+        env=env,
+        **agent_params
+    )
 
     if config.get('load_checkpoint', False):
         agent.load()
