@@ -8,11 +8,12 @@ episodes: 4000
 max_steps: 500
 target_score: 240
 save_interval: 50
+load_checkpoint: false
 
 # Agent hyperparameters
-lr_actor: 0.001
-lr_critic: 0.001
-batch_size: 16
+lr_actor: 0.004
+lr_critic: 0.004
+batch_size: 64
 buffer_size: 1000000
 gamma: 0.99
 tau: 0.001

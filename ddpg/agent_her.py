@@ -4,7 +4,6 @@ import torch
 import torch.nn.functional as F
 
 from ddpg.network import ActorNetwork, CriticNetwork
-from ddpg.noise_injector import OrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
 
 from ddpg.agent import Agent
@@ -31,6 +30,8 @@ class AgentHer(Agent):
                  noise_sigma=0.5,
                  noise_sigma_final=0.2,
                  noise_sigma_decay=0.001,
+                 num_envs=1,
+                 noise_seed=None,
                  toggle_sigma_decay=True,
                  ):
         super(AgentHer, self).__init__(
@@ -48,6 +49,8 @@ class AgentHer(Agent):
             noise_sigma=noise_sigma,
             noise_sigma_final=noise_sigma_final,
             noise_sigma_decay=noise_sigma_decay,
+            num_envs=num_envs,
+            noise_seed=noise_seed,
         )
         self.env = env
         self.memory_her = ReplayBuffer(replay_buffer_size)

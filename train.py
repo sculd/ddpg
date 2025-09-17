@@ -11,7 +11,7 @@ import yaml
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DDPG agent')
-    parser.add_argument('--config', type=str, required=True,
+    parser.add_argument('--config', type=str, required=False,
                         help='Configuration file name or path (e.g., bipedal_walker, lunar_lander)')
 
     # Allow overriding specific parameters from command line
@@ -29,11 +29,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main(config_name=None):
     args = parse_args()
 
+    config_name = config_name or args.config
     # Load configuration file
-    config = load_config(args.config)
+    config = load_config(config_name)
 
     # Override config with command-line arguments
     if args.env is not None:
@@ -64,6 +65,9 @@ def main():
 
     # Create environment
     env = gym.make(config['env'], render_mode=None, **env_params)
+    n_inputs = env.observation_space.shape[0]
+    n_actions = env.action_space.shape[0]
+    env = gym.make_vec(config['env'], num_envs=8, vectorization_mode="async")
 
     # Set random seed
     seed = config.get('seed')
@@ -73,8 +77,8 @@ def main():
 
     # Create agent with configurable parameters
     agent_params = {
-        'n_inputs': env.observation_space.shape[0],
-        'n_actions': env.action_space.shape[0],
+        'n_inputs': n_inputs,
+        'n_actions': n_actions,
         'env_name': config['env'],
         'lr_actor': config['lr_actor'],
         'lr_critic': config['lr_critic'],
@@ -152,4 +156,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main("bipedal_walker")

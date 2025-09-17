@@ -12,7 +12,7 @@ def parse_args():
                         help='Configuration file name or path (e.g., bipedal_walker, lunar_lander)')
 
     # Allow overriding specific parameters from command line
-    parser.add_argument('--episodes', type=int, default=10,
+    parser.add_argument('--episodes', type=int, default=3,
                         help='Override number of test episodes')
     parser.add_argument('--no-render', action='store_true',
                         help='Disable rendering')
@@ -89,7 +89,7 @@ def main():
     )
     agent.load(load_memory=config.get('load_memory', False))
 
-    max_episodes = config['episodes']
+    max_episodes = config['test_episodes']
     max_steps = config['max_steps']
 
     for episode in range(1, max_episodes + 1):

@@ -6,20 +6,22 @@ import numpy as np
 
 
 class OrnsteinUhlenbeckActionNoise:
-    def __init__(self, mu, sigma=0.2, sigma_final=0.2, sigma_decay=0.001, theta=0.15, dt=1e-2, x0=None):
+    def __init__(self, mu, sigma=0.2, sigma_final=0.2, sigma_decay=0.001, theta=0.15, dt=1e-2, x0=None, seed=None):
         self.theta = theta
-        self.mu = mu
+        self.mu = np.array(mu, dtype=np.float32)
         self.sigma = sigma
         self.sigma_initial = sigma
         self.sigma_final = sigma_final
         self.sigma_decay = sigma_decay
         self.dt = dt
         self.x0 = x0
+        self._rng = np.random.default_rng(seed)
         self.reset()
 
     def __call__(self):
+        gaussian = self._rng.normal(size=self.mu.shape).astype(self.mu.dtype, copy=False)
         x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + \
-            self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
+            self.sigma * np.sqrt(self.dt) * gaussian
         self.x_prev = x
         return x
 
@@ -29,7 +31,63 @@ class OrnsteinUhlenbeckActionNoise:
     def reset(self):
         self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
         self.sigma = self.sigma_initial
-        print("reset the noise")
 
     def __repr__(self):
         return f'OrnsteinUhlenbeckActionNoise(mu={self.mu}, sigma={self.sigma}, theta={self.theta})'
+
+
+class VectorizedOrnsteinUhlenbeckActionNoise:
+    """Maintain one OU process per environment index."""
+
+    def __init__(self,
+                 num_envs,
+                 action_dim,
+                 sigma=0.2,
+                 sigma_final=0.2,
+                 sigma_decay=0.001,
+                 theta=0.15,
+                 dt=1e-2,
+                 x0=None,
+                 seed=None):
+        self.num_envs = num_envs
+        self.action_dim = action_dim
+        self._noises = []
+        for idx in range(num_envs):
+            noise_seed = None if seed is None else seed + idx
+            self._noises.append(
+                OrnsteinUhlenbeckActionNoise(
+                    mu=np.zeros(action_dim, dtype=np.float32),
+                    sigma=sigma,
+                    sigma_final=sigma_final,
+                    sigma_decay=sigma_decay,
+                    theta=theta,
+                    dt=dt,
+                    x0=x0,
+                    seed=noise_seed,
+                )
+            )
+
+    def sample(self, env_indices):
+        indices = np.atleast_1d(env_indices)
+        return np.stack([self._noises[int(idx)]() for idx in indices], axis=0)
+
+    def __call__(self, env_indices):
+        return self.sample(env_indices)
+
+    def reset(self, env_indices=None):
+        if env_indices is None:
+            target_indices = range(self.num_envs)
+        else:
+            target_indices = np.atleast_1d(env_indices)
+        for idx in target_indices:
+            self._noises[int(idx)].reset()
+
+    def decay_sigma(self):
+        for noise in self._noises:
+            noise.decay_sigma()
+
+    @property
+    def sigma(self):
+        if not self._noises:
+            return 0.0
+        return float(np.mean([noise.sigma for noise in self._noises]))

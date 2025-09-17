@@ -52,8 +52,15 @@ class Agent:
         return mu.cpu().detach().numpy()
 
     def step(self, state, action, reward, next_state, done):
-        self.memory.push(state, action, reward, next_state, done)
-        self.timestep += 1
+        # Handle vectorized environments - store each transition separately
+        if len(state.shape) > 1:  # Vectorized environment
+            for i in range(state.shape[0]):
+                self.memory.push(state[i], action[i], reward[i], next_state[i], done[i])
+                self.timestep += 1
+        else:  # Single environment
+            self.memory.push(state, action, reward, next_state, done)
+            self.timestep += 1
+
         if self.timestep % UPDATE_EVERY == 0 and self.memory.total_count() > self.batch_size:
             sampled_experiences = self.memory.sample(self.batch_size)
             self.learn(sampled_experiences)

@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import ddpg.util.device
 
 _snapshot_dir = "snapshot"
@@ -60,6 +61,7 @@ class ActorNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.mu, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=100, eta_min=learning_rate/4.)
         self.to(ddpg.util.device.device)
 
     def forward(self, state):
@@ -68,9 +70,11 @@ class ActorNetwork(nn.Module, _SaveLoader):
             x = x.unsqueeze(0)  # Add batch dimension if input is 1D
         x = self.bn1(x)
         x = F.relu(x)
+
         x = self.fc2(x)
-        #x = self.bn2(x)
+        x = self.bn2(x)
         x = F.relu(x)
+
         x = self.mu(x)
         x = torch.tanh(x)  # section 7
         if x.dim() == 2:
@@ -100,6 +104,7 @@ class CriticNetwork(nn.Module, _SaveLoader):
         _init_uniform(self.q, f=0.003)
 
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=100, eta_min=learning_rate/4.)
         self.to(ddpg.util.device.device)
 
     def forward(self, state, action): # notice that critic takes both state and action.
@@ -107,9 +112,10 @@ class CriticNetwork(nn.Module, _SaveLoader):
         state_value = self.fc1(torch.cat((state_value, action), 1))
         state_value = self.bn1(state_value)
         state_value = F.relu(state_value)
+        
         state_value = self.fc2(state_value)
-        #state_value = self.bn2(state_value)
+        state_value = self.bn2(state_value)
         state_value = F.relu(state_value)
-
+        
         q_value = self.q(state_value)
         return q_value

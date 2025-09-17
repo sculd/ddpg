@@ -12,7 +12,7 @@ save_interval: 50
 # Agent hyperparameters
 lr_actor: 0.001
 lr_critic: 0.001
-batch_size: 16
+batch_size: 64
 buffer_size: 1000000
 gamma: 0.99
 tau: 0.001
