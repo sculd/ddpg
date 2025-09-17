@@ -107,8 +107,6 @@ def main():
                 break
 
             obs = next_state
-            if config.get('with_noise', False):
-                agent.noise.decay_sigma()
 
         if episode % 1 == 0:
             print(f'{episode=}, {score=:.1f}', end="\n")
@@ -118,5 +116,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

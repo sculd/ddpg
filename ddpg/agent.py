@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from ddpg.network import ActorNetwork, CriticNetwork
-from ddpg.noise_injector import OrnsteinUhlenbeckActionNoise
+from ddpg.noise_injector import VectorizedOrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
 import ddpg.util.device
 
@@ -11,27 +11,35 @@ UPDATE_EVERY = 1
 
 
 class Agent:
-    def __init__(self,  
-                 n_inputs, 
-                 n_actions, 
-                 env_name, 
-                 lr_actor=1e-3, 
+    def __init__(self,
+                 n_inputs,
+                 n_actions,
+                 env_name,
+                 lr_actor=1e-3,
                  lr_critic=1e-3,
-                 tau=0.001, 
-                 gamma=0.99, 
-                 replay_buffer_size=10**6, 
-                 layer1_size=400, 
-                 layer2_size=300, 
-                 batch_size=16, 
+                 tau=0.001,
+                 gamma=0.99,
+                 replay_buffer_size=10**6,
+                 layer1_size=400,
+                 layer2_size=300,
+                 batch_size=16,
                  noise_sigma=0.5,
                  noise_sigma_final=0.2,
-                 noise_sigma_decay=0.001,
+                 num_envs=1,
+                 noise_seed=None,
                  ):
         self.gamma = gamma
         self.tau = tau
-        self.noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(n_actions), sigma=noise_sigma, sigma_final=noise_sigma_final, sigma_decay=noise_sigma_decay)
+        self.noise = VectorizedOrnsteinUhlenbeckActionNoise(
+            num_envs=max(1, num_envs),
+            action_dim=n_actions,
+            sigma=noise_sigma,
+            sigma_final=noise_sigma_final,
+            seed=noise_seed,
+        )
         self.memory = ReplayBuffer(env_name, replay_buffer_size)
         self.batch_size = batch_size
+        self.num_envs = num_envs
 
         self.actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Actor').to(ddpg.util.device.device)
         self.target_actor = ActorNetwork(lr_actor, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetActor').to(ddpg.util.device.device)
@@ -41,15 +49,33 @@ class Agent:
         self.update_network_parameters(tau=1)
         self.timestep = 0
 
-    def choose_action(self, observation, with_noise=True):
+    def choose_action(self, observation, env_indices=None, with_noise=True):
         self.actor.eval()
         observation = torch.tensor(observation, dtype=torch.float).to(ddpg.util.device.device)
         mu = self.actor(observation)
-        if with_noise:
-            mu = mu + torch.tensor(self.noise(), dtype=torch.float).to(ddpg.util.device.device)
-            mu = torch.clip(mu, min=-1, max=+1)
         self.actor.train()
-        return mu.cpu().detach().numpy()
+        actions = mu.cpu().detach().numpy()
+
+        if not with_noise:
+            return actions.astype(np.float32, copy=False)
+
+        if actions.ndim == 1:
+            env_index = 0 if env_indices is None else int(np.atleast_1d(env_indices)[0])
+            noise_value = self.noise.sample([env_index])[0]
+            actions = np.clip(actions + noise_value, -1.0, 1.0)
+            return actions.astype(np.float32, copy=False)
+
+        if env_indices is None:
+            env_indices = np.arange(actions.shape[0])
+        noise_batch = self.noise.sample(env_indices)
+        actions = np.clip(actions + noise_batch, -1.0, 1.0)
+        return actions.astype(np.float32, copy=False)
+
+    def set_noise_sigma(self, value):
+        self.noise.set_sigma(value)
+
+    def reset_noise_sigma(self):
+        self.noise.reset_sigma()
 
     def step(self, state, action, reward, next_state, done):
         # Handle vectorized environments - store each transition separately
@@ -90,6 +116,7 @@ class Agent:
         critic_loss = F.mse_loss(q_target, q)
         critic_loss.backward()
         self.critic.optimizer.step()
+        self.critic.scheduler.step()
 
     def learn_actor(self, experiences):
         states, goals, actions, rewards, next_states, dones = experiences
@@ -103,6 +130,7 @@ class Agent:
         actor_loss = torch.mean(-actor_q)
         actor_loss.backward()
         self.actor.optimizer.step()
+        self.actor.scheduler.step()
 
     def _update_target_network(self, tau, source_network, target_network):
         for source_parameters, target_parameters in zip(source_network.parameters(), target_network.parameters()):

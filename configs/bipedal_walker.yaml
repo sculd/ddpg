@@ -19,9 +19,10 @@ gamma: 0.99
 tau: 0.001
 
 # Noise parameters
-noise_sigma: 0.2
-noise_sigma_final: 0.2
-noise_sigma_decay: 0.001
+noise_sigma_initial: 0.2
+noise_sigma_final: 0.04
+noise_decay_score_threshold: 0.0
+noise_score_decay_rate: 0.1
 
 # Logging
 wandb: true
