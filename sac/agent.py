@@ -1,8 +1,6 @@
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import math
 
 import sac.utils
 
@@ -17,7 +15,7 @@ class Agent(object):
         pass
 
     @abc.abstractmethod
-    def train(self, training=True):
+    def train(self, is_train=True):
         """Sets the agent in either training or evaluation mode."""
 
     @abc.abstractmethod
@@ -68,10 +66,11 @@ class SACAgent(Agent):
         self.train()
         self.critic_target.train()
 
-    def train(self, training=True):
-        self.training = training
-        self.actor.train(training)
-        self.critic.train(training)
+    def train(self, is_train=True):
+        # is_train False means eval mode
+        self.is_train = is_train
+        self.actor.train(is_train)
+        self.critic.train(is_train)
 
     @property
     def alpha(self):
@@ -136,11 +135,11 @@ class SACAgent(Agent):
             self.log_alpha_optimizer.step()
 
     def update(self, replay_buffer, logger, step):
-        obs, action, reward, next_obs, not_done, not_done_no_max = replay_buffer.sample(self.batch_size)
+        obs, action, reward, next_obs, not_done = replay_buffer.sample(self.batch_size)
 
         logger.log('train/batch_reward', reward.mean(), step)
 
-        self.update_critic(obs, action, reward, next_obs, not_done_no_max, logger, step)
+        self.update_critic(obs, action, reward, next_obs, not_done, logger, step)
 
         if step % self.actor_update_frequency == 0:
             self.update_actor_and_alpha(obs, logger, step)

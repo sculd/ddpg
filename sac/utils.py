@@ -67,7 +67,7 @@ class eval_mode(object):
     def __enter__(self):
         self.prev_states = []
         for model in self.models:
-            self.prev_states.append(model.training)
+            self.prev_states.append(model.is_train)
             model.train(False)
 
     def __exit__(self, *args):
@@ -83,7 +83,7 @@ class train_mode(object):
     def __enter__(self):
         self.prev_states = []
         for model in self.models:
-            self.prev_states.append(model.training)
+            self.prev_states.append(model.is_train)
             model.train(True)
 
     def __exit__(self, *args):
