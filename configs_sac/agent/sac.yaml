@@ -1,0 +1,36 @@
+double_q_critic:
+  _target_: sac.network.DoubleQCritic
+  obs_dim: ${agent.obs_dim}
+  action_dim: ${agent.action_dim}
+  hidden_dim: 1024
+  hidden_depth: 2
+
+diag_gaussian_actor:
+  _target_: sac.network.DiagGaussianActor
+  obs_dim: ${agent.obs_dim}
+  action_dim: ${agent.action_dim}
+  hidden_depth: 2
+  hidden_dim: 1024
+  log_std_bounds: [-5, 2]
+
+name: sac
+_target_: sac.agent.SACAgent
+obs_dim: ??? # to be specified later
+action_dim: ??? # to be specified later
+action_range: ??? # to be specified later
+device: ${device}
+critic_cfg: ${agent.double_q_critic}
+actor_cfg: ${agent.diag_gaussian_actor}
+discount: 0.99
+init_temperature: 0.1
+alpha_lr: 1e-4
+alpha_betas: [0.9, 0.999]
+actor_lr: 1e-4
+actor_betas: [0.9, 0.999]
+actor_update_frequency: 1
+critic_lr: 1e-4
+critic_betas: [0.9, 0.999]
+critic_tau: 0.005
+critic_target_update_frequency: 2
+batch_size: 1024
+learnable_temperature: true
