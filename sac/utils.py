@@ -10,7 +10,7 @@ import random
 import math
 
 
-def make_env(cfg):
+def make_env(cfg, render_mode):
     """Helper function to create dm_control environment (using gym-dmc)"""
     env_id = cfg.env
 
@@ -39,7 +39,7 @@ def make_env(cfg):
 
     # Gymnasium environments (e.g. BipedalWalker-v3)
     else:
-        env = gym.make(env_id)
+        env = gym.make(env_id, render_mode=render_mode)
         env.reset(seed=cfg.seed) 
 
     # sanity check for SAC [-1,1] action bounds
@@ -47,6 +47,18 @@ def make_env(cfg):
     assert env.action_space.high.max() <= 1
 
     return env
+
+
+def env_with_cfg(cfg, render_mode=None):
+    env = make_env(cfg, render_mode=render_mode)
+    cfg.agent.obs_dim = env.observation_space.shape[0]
+    cfg.agent.action_dim = env.action_space.shape[0]
+    cfg.agent.action_range = [
+        float(env.action_space.low.min()),
+        float(env.action_space.high.max())
+    ]    
+    return env, cfg
+
 
 class eval_mode(object):
     def __init__(self, *models):
@@ -145,3 +157,4 @@ def to_np(t):
         return np.array([])
     else:
         return t.cpu().detach().numpy()
+

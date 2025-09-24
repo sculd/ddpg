@@ -57,8 +57,6 @@ class DoubleQCritic(nn.Module):
 
 
 
-
-
 class TanhTransform(pyd.transforms.Transform):
     domain = pyd.constraints.real
     codomain = pyd.constraints.interval(-1.0, 1.0)
