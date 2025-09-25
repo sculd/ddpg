@@ -82,6 +82,8 @@ class SACAgent(Agent):
         dist = self.actor(obs)
         action = dist.sample() if sample else dist.mean
         action = action.clamp(*self.action_range)
+        #   1. action.ndim == 2: Action must be a 2D tensor (batch_size × action_dim)
+        #   2. action.shape[0] == 1: Batch size must be exactly 1
         assert action.ndim == 2 and action.shape[0] == 1
         return sac.utils.to_np(action[0])
 
@@ -102,6 +104,7 @@ class SACAgent(Agent):
         # Optimize the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic_optimizer.step()
 
         self.critic.log(logger, step)
@@ -122,6 +125,7 @@ class SACAgent(Agent):
         # optimize the actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor_optimizer.step()
 
         self.actor.log(logger, step)
@@ -132,6 +136,7 @@ class SACAgent(Agent):
             logger.log('train_alpha/loss', alpha_loss, step)
             logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
             self.log_alpha_optimizer.step()
 
     def update(self, replay_buffer, logger, step):
