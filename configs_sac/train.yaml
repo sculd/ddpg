@@ -11,7 +11,7 @@ replay_buffer_capacity: ${num_train_steps}
 
 num_seed_steps: 5000
 
-eval_frequency: 10000
+eval_frequency: 30
 num_eval_episodes: 3
 
 device: cuda

@@ -23,7 +23,7 @@ class Agent:
                  layer1_size=400,
                  layer2_size=300,
                  batch_size=16,
-                 noise_sigma=0.5,
+                 noise_sigma_initial=0.5,
                  noise_sigma_final=0.2,
                  num_envs=1,
                  noise_seed=None,
@@ -33,7 +33,7 @@ class Agent:
         self.noise = VectorizedOrnsteinUhlenbeckActionNoise(
             num_envs=max(1, num_envs),
             action_dim=n_actions,
-            sigma=noise_sigma,
+            sigma=noise_sigma_initial,
             sigma_final=noise_sigma_final,
             seed=noise_seed,
         )
@@ -46,7 +46,8 @@ class Agent:
         self.critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_Critic').to(ddpg.util.device.device)
         self.target_critic = CriticNetwork(lr_critic, n_inputs, layer1_size, layer2_size, n_actions=n_actions, name=f'{env_name}_TargetCritic').to(ddpg.util.device.device)
 
-        self.update_network_parameters(tau=1)
+        self._update_target_network(1, self.critic, self.target_critic)
+        self._update_target_network(1, self.actor, self.target_actor)
         self.timestep = 0
 
     def choose_action(self, observation, env_indices=None, with_noise=True):
@@ -115,6 +116,7 @@ class Agent:
         self.critic.optimizer.zero_grad()
         critic_loss = F.mse_loss(q_target, q)
         critic_loss.backward()
+        #torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic.optimizer.step()
         self.critic.scheduler.step()
 
@@ -129,6 +131,7 @@ class Agent:
         # negative sign to maximize q
         actor_loss = torch.mean(-actor_q)
         actor_loss.backward()
+        #torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor.optimizer.step()
         self.actor.scheduler.step()
 
@@ -140,10 +143,6 @@ class Agent:
         self._update_target_network(tau, self.critic, self.target_critic)
 
     def _update_actor_network_parameters(self, tau):
-        self._update_target_network(tau, self.actor, self.target_actor)
-
-    def update_network_parameters(self, tau):
-        self._update_target_network(tau, self.critic, self.target_critic)
         self._update_target_network(tau, self.actor, self.target_actor)
 
     def save(self):
