@@ -56,7 +56,7 @@ class Workspace(object):
         self.logger.log('eval/episode_reward', average_episode_reward, self.step)
 
     def run(self):
-        episode, episode_reward, done = 0, 0, True
+        episode, episode_reward, max_episode_reward, done = 0, 0, 0, True
         start_time = time.time()
         while self.step < self.cfg.num_train_steps:
             if done:
@@ -65,11 +65,17 @@ class Workspace(object):
                 self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
 
                 # evaluate agent periodically
-                if episode + 1 % self.cfg.eval_frequency == 0:
+                if (episode + 1) % self.cfg.eval_frequency == 0:
                     self.logger.log('eval/episode', episode, self.step)
                     self.evaluate()
+                    if max_episode_reward < self.cfg.target_score:
+                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
 
                 self.logger.log('train/episode_reward', episode_reward, self.step)
+
+                max_episode_reward = max(max_episode_reward, episode_reward)
+                if episode_reward > self.cfg.target_score:
+                    self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
 
                 obs, _ = self.env.reset()
                 self.agent.reset()

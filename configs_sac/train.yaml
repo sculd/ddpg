@@ -13,6 +13,7 @@ num_seed_steps: 5000
 
 eval_frequency: 30
 num_eval_episodes: 3
+target_score: 240
 
 device: cuda
 

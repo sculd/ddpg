@@ -23,7 +23,7 @@ class Workspace(object):
         self.step = 0
 
     def evaluate(self):
-        self.agent.load(os.path.join(self.work_dir, 'sac.pt'))
+        self.agent.load(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
         average_episode_reward = 0
         for episode in range(self.cfg.num_eval_episodes):
             obs, _ = self.env.reset()

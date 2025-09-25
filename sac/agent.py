@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import os
 
 import sac.utils
 
@@ -151,3 +152,56 @@ class SACAgent(Agent):
 
         if step % self.critic_target_update_frequency == 0:
             sac.utils.soft_update_params(self.critic, self.critic_target, self.critic_tau)
+
+    def save(self, filepath, save_optimizers=False):
+        """Save model checkpoints.
+
+        Args:
+            filepath: Path to save the checkpoint
+            save_optimizers: If True, save optimizer states (larger file, can resume training)
+                           If False, only save model weights (smaller file, for inference)
+        """
+        import os
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+        checkpoint = {
+            'actor_state_dict': self.actor.state_dict(),
+            'critic_state_dict': self.critic.state_dict(),
+            'critic_target_state_dict': self.critic_target.state_dict(),
+            'log_alpha': self.log_alpha.data,
+        }
+
+        if save_optimizers:
+            checkpoint.update({
+                'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
+                'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+                'log_alpha_optimizer_state_dict': self.log_alpha_optimizer.state_dict(),
+            })
+
+        torch.save(checkpoint, filepath)
+        print(f"Saved checkpoint to {filepath} (optimizers={'included' if save_optimizers else 'excluded'})")
+
+    def load(self, filepath, load_optimizers=False):
+        """Load model checkpoints.
+
+        Args:
+            filepath: Path to load the checkpoint from
+            load_optimizers: If True, load optimizer states (if available)
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
+
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
+
+        self.actor.load_state_dict(checkpoint['actor_state_dict'])
+        self.critic.load_state_dict(checkpoint['critic_state_dict'])
+        self.critic_target.load_state_dict(checkpoint['critic_target_state_dict'])
+        self.log_alpha.data = checkpoint['log_alpha']
+
+        if load_optimizers and 'actor_optimizer_state_dict' in checkpoint:
+            self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
+            self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+            self.log_alpha_optimizer.load_state_dict(checkpoint['log_alpha_optimizer_state_dict'])
+            print(f"Loaded checkpoint from {filepath} (with optimizers)")
+        else:
+            print(f"Loaded checkpoint from {filepath} (model only)")
