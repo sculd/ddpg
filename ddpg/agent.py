@@ -116,7 +116,7 @@ class Agent:
         self.critic.optimizer.zero_grad()
         critic_loss = F.mse_loss(q_target, q)
         critic_loss.backward()
-        #torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
         self.critic.optimizer.step()
         self.critic.scheduler.step()
 
@@ -131,7 +131,7 @@ class Agent:
         # negative sign to maximize q
         actor_loss = torch.mean(-actor_q)
         actor_loss.backward()
-        #torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor.optimizer.step()
         self.actor.scheduler.step()
 
