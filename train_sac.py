@@ -39,35 +39,37 @@ class Workspace(object):
         self.step = 0
 
     def evaluate(self):
+        self.logger.log('eval/episode', episode, self.step)
         average_episode_reward = 0
-        for episode in range(self.cfg.num_eval_episodes):
-            obs, _ = self.env.reset()
-            self.agent.reset()
-            done = False
-            episode_reward = 0
-            while not done:
-                with sac.utils.eval_mode(self.agent):
+        with sac.utils.eval_mode(self.agent):
+            for episode in range(self.cfg.num_eval_episodes):
+                obs, _ = self.env.reset()
+                done = False
+                episode_reward = 0
+                while not done:
                     action = self.agent.act(obs, sample=False)
-                obs, reward, done, _, _ = self.env.step(action)
-                episode_reward += reward
+                    obs, reward, done, _, _ = self.env.step(action)
+                    episode_reward += reward
 
-            average_episode_reward += episode_reward
+                average_episode_reward += episode_reward
         average_episode_reward /= self.cfg.num_eval_episodes
         self.logger.log('eval/episode_reward', average_episode_reward, self.step)
 
     def run(self):
         episode, episode_reward, max_episode_reward, done = 0, 0, 0, True
+        episode_step = 0
         start_time = time.time()
         while self.step < self.cfg.num_train_steps:
-            if done:
+            if done or episode_step >= self.cfg.max_episode_steps:
+                if self.step < self.cfg.num_seed_steps:
+                    print(f"Episode {episode} completed at step {self.step}")
                 self.logger.log('train/duration', time.time() - start_time, self.step)
                 start_time = time.time()
                 self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
 
                 # evaluate agent periodically
                 if (episode + 1) % self.cfg.eval_frequency == 0:
-                    self.logger.log('eval/episode', episode, self.step)
-                    self.evaluate()
+                    #self.evaluate()
                     if max_episode_reward < self.cfg.target_score:
                         self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
 

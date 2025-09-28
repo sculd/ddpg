@@ -67,12 +67,12 @@ class eval_mode(object):
     def __enter__(self):
         self.prev_states = []
         for model in self.models:
-            self.prev_states.append(model.is_train)
-            model.train(False)
+            self.prev_states.append(model.mode)
+            model.train(mode=False)
 
     def __exit__(self, *args):
         for model, state in zip(self.models, self.prev_states):
-            model.train(state)
+            model.train(mode=state)
         return False
 
 
@@ -83,12 +83,12 @@ class train_mode(object):
     def __enter__(self):
         self.prev_states = []
         for model in self.models:
-            self.prev_states.append(model.is_train)
-            model.train(True)
+            self.prev_states.append(model.mode)
+            model.train(mode=True)
 
     def __exit__(self, *args):
         for model, state in zip(self.models, self.prev_states):
-            model.train(state)
+            model.train(mode=state)
         return False
 
 

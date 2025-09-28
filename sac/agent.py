@@ -67,11 +67,15 @@ class SACAgent(Agent):
         self.train()
         self.critic_target.train()
 
-    def train(self, is_train=True):
-        # is_train False means eval mode
-        self.is_train = is_train
-        self.actor.train(is_train)
-        self.critic.train(is_train)
+    def train(self, mode=True):
+        # mode False means eval mode
+        self.mode = mode
+        if mode:
+            self.actor.train()
+            self.critic.train()
+        else:
+            self.actor.eval()
+            self.critic.eval()
 
     @property
     def alpha(self):

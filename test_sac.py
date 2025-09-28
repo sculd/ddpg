@@ -32,7 +32,7 @@ class Workspace(object):
             episode_reward = 0
             while not done:
                 with sac.utils.eval_mode(self.agent):
-                    action = self.agent.act(obs, sample=False)
+                    action = self.agent.act(obs, sample=True)
                 obs, reward, done, _, _ = self.env.step(action)
                 episode_reward += reward
 
