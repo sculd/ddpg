@@ -2,12 +2,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import os
-
-import sac.utils
+import abc
 
 import hydra
 
-import abc
+import sac.utils
 
 
 class Agent(object):
@@ -141,7 +140,7 @@ class SACAgent(Agent):
             logger.log('train_alpha/loss', alpha_loss, step)
             logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.log_alpha, max_norm=1.0)
             self.log_alpha_optimizer.step()
 
     def update(self, replay_buffer, logger, step):
@@ -158,10 +157,7 @@ class SACAgent(Agent):
             sac.utils.soft_update_params(self.critic, self.critic_target, self.critic_tau)
 
     def save(self, filepath, save_optimizers=False):
-        """Save model checkpoints.
-
-        Args:
-            filepath: Path to save the checkpoint
+        """
             save_optimizers: If True, save optimizer states (larger file, can resume training)
                            If False, only save model weights (smaller file, for inference)
         """
@@ -186,10 +182,7 @@ class SACAgent(Agent):
         print(f"Saved checkpoint to {filepath} (optimizers={'included' if save_optimizers else 'excluded'})")
 
     def load(self, filepath, load_optimizers=False):
-        """Load model checkpoints.
-
-        Args:
-            filepath: Path to load the checkpoint from
+        """
             load_optimizers: If True, load optimizer states (if available)
         """
         if not os.path.exists(filepath):

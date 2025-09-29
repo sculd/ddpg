@@ -1,5 +1,3 @@
-import datetime, os
-import pathlib
 import math
 
 import numpy as np
@@ -9,9 +7,6 @@ import torch.nn.functional as F
 from torch import distributions as pyd
 
 import sac.utils
-
-_snapshot_dir = "snapshot"
-
 
 
 def _init_uniform(layer, f=None):

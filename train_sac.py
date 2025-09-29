@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-import numpy as np
 import torch
-import copy
-import math
 import os
-import sys
 import time
+
+import hydra
 
 from sac.logger import Logger
 from sac.replay_buffer import ReplayBuffer
 import sac.utils
-
-import hydra
 
 
 class Workspace(object):
@@ -38,23 +34,6 @@ class Workspace(object):
 
         self.step = 0
 
-    def evaluate(self):
-        self.logger.log('eval/episode', episode, self.step)
-        average_episode_reward = 0
-        with sac.utils.eval_mode(self.agent):
-            for episode in range(self.cfg.num_eval_episodes):
-                obs, _ = self.env.reset()
-                done = False
-                episode_reward = 0
-                while not done:
-                    action = self.agent.act(obs, sample=False)
-                    obs, reward, done, _, _ = self.env.step(action)
-                    episode_reward += reward
-
-                average_episode_reward += episode_reward
-        average_episode_reward /= self.cfg.num_eval_episodes
-        self.logger.log('eval/episode_reward', average_episode_reward, self.step)
-
     def run(self):
         episode, episode_reward, max_episode_reward, done = 0, 0, 0, True
         episode_step = 0
@@ -69,7 +48,6 @@ class Workspace(object):
 
                 # evaluate agent periodically
                 if (episode + 1) % self.cfg.eval_frequency == 0:
-                    #self.evaluate()
                     if max_episode_reward < self.cfg.target_score:
                         self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
 

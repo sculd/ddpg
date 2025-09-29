@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import torch
 import os
 
 import hydra
@@ -17,7 +16,6 @@ class Workspace(object):
         self.cfg = cfg
 
         sac.utils.set_seed_everywhere(cfg.seed)
-        self.device = torch.device(cfg.device)
         self.agent = hydra.utils.instantiate(cfg.agent, _recursive_=False)
 
         self.step = 0
@@ -26,22 +24,27 @@ class Workspace(object):
         self.agent.load(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
         average_episode_reward = 0
         for episode in range(self.cfg.num_eval_episodes):
+            print(f"Evaluating episode {episode}")
             obs, _ = self.env.reset()
             self.agent.reset()
             done = False
             episode_reward = 0
+            episode_step = 0
             while not done:
                 with sac.utils.eval_mode(self.agent):
                     action = self.agent.act(obs, sample=True)
                 obs, reward, done, _, _ = self.env.step(action)
                 episode_reward += reward
+                episode_step += 1
+                if episode_step >= self.cfg.max_episode_steps:
+                    break
 
+            print(f"Episode {episode} reward: {episode_reward}")
             average_episode_reward += episode_reward
         average_episode_reward /= self.cfg.num_eval_episodes
         print(f"Average episode reward: {average_episode_reward}")
-        self.env.close()
 
-@hydra.main(version_base=None, config_path="configs_sac", config_name="train.yaml")
+@hydra.main(version_base=None, config_path="configs_sac", config_name="test.yaml")
 def main(cfg):
     env, cfg = sac.utils.env_with_cfg(cfg, render_mode="rgb_array")
 
@@ -58,6 +61,7 @@ def main(cfg):
 
     workspace = Workspace(env, cfg)
     workspace.evaluate()
+    env.close()
 
 
 if __name__ == '__main__':

@@ -2,12 +2,13 @@ defaults:
   - agent: sac
   - _self_
 
-env: BipedalWalker-v3
+#env: BipedalWalker-v3
+env: BipedalWalkerHardcore-v3
 
 experiment: test_exp
 
 num_train_steps: 1e6
-max_episode_steps: 1000
+max_episode_steps: 1500
 replay_buffer_capacity: ${num_train_steps}
 
 num_seed_steps: 5000
@@ -20,8 +21,6 @@ device: cuda
 
 log_frequency: 10000
 log_save_tb: true
-
-save_video: true
 
 seed: 1
 

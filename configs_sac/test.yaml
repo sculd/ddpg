@@ -1,0 +1,19 @@
+defaults:
+  - agent: sac
+  - _self_
+
+#env: BipedalWalker-v3
+env: BipedalWalkerHardcore-v3
+
+max_episode_steps: 2000
+num_eval_episodes: 3
+
+device: cuda
+
+seed: 1
+
+hydra:
+  job:
+    name: ${env}
+  run:
+    dir: ./exp
