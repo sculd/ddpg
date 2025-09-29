@@ -189,15 +189,15 @@ class SAC_FORK(object):
         torch.save(self.sysr_optimizer.state_dict(), filename + "_reward_model_optimizer")
 
     def load(self, filename):
-        self.critic.load_state_dict(torch.load(filename + "_critic.pth"))
+        self.critic.load_state_dict(torch.load(filename + "_critic"))
         self.critic_optim.load_state_dict(torch.load(filename + "_critic_optimizer"))
         self.critic_target = copy.deepcopy(self.critic)
 
-        self.policy.load_state_dict(torch.load(filename + "_actor.pth"))
+        self.policy.load_state_dict(torch.load(filename + "_actor"))
         self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer"))
 
-        self.sysmodel.load_state_dict(torch.load(filename + "_sysmodel.pth"))
+        self.sysmodel.load_state_dict(torch.load(filename + "_sysmodel"))
         self.sysmodel_optimizer.load_state_dict(torch.load(filename + "_sysmodel_optimizer"))
 
-        self.sysr.load_state_dict(torch.load(filename + "_reward_model.pth"))
+        self.sysr.load_state_dict(torch.load(filename + "_reward_model"))
         self.sysr_optimizer.load_state_dict(torch.load(filename + "_reward_model_optimizer"))

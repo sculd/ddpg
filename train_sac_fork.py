@@ -12,6 +12,7 @@ from sac_fork.replay_memory import ReplayMemory
 
 _checkpoint_file = 'checkpoints/sac_fork.pt'
 
+
 class Workspace(object):
     def __init__(self, env, cfg):
         self.work_dir = os.getcwd()
