@@ -1,9 +1,11 @@
-import numpy as np
-import random
-import torch
-import pickle
 import os
+import pickle
+import random
 from collections import deque, namedtuple
+
+import numpy as np
+import torch
+
 import ddpg.util.device
 
 # Use the same device as defined in util/device.py

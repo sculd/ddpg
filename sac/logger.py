@@ -1,12 +1,13 @@
-from torch.utils.tensorboard import SummaryWriter
-from collections import defaultdict
+import csv
 import json
 import os
-import csv
 import shutil
-import torch
+from collections import defaultdict
+
 import numpy as np
+import torch
 from termcolor import colored
+from torch.utils.tensorboard import SummaryWriter
 
 COMMON_TRAIN_FORMAT = [
     ('episode', 'E', 'int'),

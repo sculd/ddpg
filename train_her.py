@@ -1,9 +1,11 @@
 import datetime
-import numpy as np
 from collections import deque
-from ddpg.agner_her import AgentHer as Agent
+
 import gymnasium as gym
 import gymnasium_robotics
+import numpy as np
+
+from ddpg.agner_her import AgentHer as Agent
 
 gym.register_envs(gymnasium_robotics)
 env_name = 'FetchReach-v3'

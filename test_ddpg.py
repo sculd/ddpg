@@ -1,9 +1,11 @@
+import argparse
 import datetime
+
 import gymnasium as gym
 import numpy as np
-import argparse
-from ddpg.util.config import load_config
+
 from ddpg.util.agent_factory import create_agent
+from ddpg.util.config import load_config
 
 
 def parse_args():

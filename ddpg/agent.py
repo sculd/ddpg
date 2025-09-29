@@ -2,10 +2,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import ddpg.util.device
 from ddpg.network import ActorNetwork, CriticNetwork
 from ddpg.noise_injector import VectorizedOrnsteinUhlenbeckActionNoise
 from ddpg.replaybuffer import ReplayBuffer
-import ddpg.util.device
 
 UPDATE_EVERY = 1
 

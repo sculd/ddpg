@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-import torch
 import os
 import time
 
 import hydra
+import torch
 
+import sac.utils
 from sac.logger import Logger
 from sac.replay_buffer import ReplayBuffer
-import sac.utils
 
 
 class Workspace(object):

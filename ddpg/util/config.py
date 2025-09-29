@@ -1,7 +1,8 @@
-import os
-import yaml
 import json
-from typing import Dict, Any
+import os
+from typing import Any, Dict
+
+import yaml
 
 
 def load_config(config_name: str = "default") -> Dict[str, Any]:

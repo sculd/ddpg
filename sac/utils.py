@@ -1,13 +1,14 @@
+import math
+import os
+import random
+from collections import deque
+
+import gymnasium as gym
 import numpy as np
 import torch
-from torch import nn
-from torch import distributions as pyd
 import torch.nn.functional as F
-import gymnasium as gym
-import os
-from collections import deque
-import random
-import math
+from torch import distributions as pyd
+from torch import nn
 
 
 def make_env(cfg, render_mode):

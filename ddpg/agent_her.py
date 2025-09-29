@@ -1,12 +1,12 @@
 import random
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+from ddpg.agent import Agent
 from ddpg.network import ActorNetwork, CriticNetwork
 from ddpg.replaybuffer import ReplayBuffer
-
-from ddpg.agent import Agent
 
 # Use cuda if available else use cpu
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

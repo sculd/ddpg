@@ -1,13 +1,14 @@
+import argparse
 import datetime
+from collections import deque
+
 import gymnasium as gym
 import numpy as np
-import argparse
-from collections import deque
-from ddpg.util.config import load_config, merge_with_args
-from ddpg.util.agent_factory import create_agent
-import wandb
 import yaml
 
+import wandb
+from ddpg.util.agent_factory import create_agent
+from ddpg.util.config import load_config, merge_with_args
 from ddpg.util.manual_vec_env import make_manual_vector_env
 
 
