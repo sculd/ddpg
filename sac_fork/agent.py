@@ -83,9 +83,11 @@ class SAC_FORK(object):
             _, _, action = self.policy.sample(state)
         return action.detach().cpu().numpy()[0]
 
-    def update_parameters(self, memory, batch_size, updates):
+    def update_parameters(self, memory, batch_size, logger, updates):
         # Sample a batch from memory
         state_batch, action_batch, reward_batch, next_state_batch, mask_batch = memory.sample(batch_size=batch_size)
+
+        logger.log('train/batch_reward', reward_batch.mean(), updates)
 
         state_batch = torch.FloatTensor(state_batch).to(self.device)
         next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
@@ -149,7 +151,6 @@ class SAC_FORK(object):
             #sys_loss = (-p_next_r -self.gamma * p_next_r2 + self.gamma ** 2 * ((self.alpha * log_pi3) - min_qf_pi2)).mean()
             sys_loss = (-p_next_r + self.alpha * log_pi - self.gamma * (p_next_r2 - self.alpha * log_pi2)  + self.gamma ** 2 * ((self.alpha * log_pi3) - min_qf_pi2)).mean()
             policy_loss += self.sys_weight * sys_loss
-            self.update_sys += 1
 
         self.policy_optim.zero_grad()
         policy_loss.backward()

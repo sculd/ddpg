@@ -4,6 +4,7 @@ import time
 
 import hydra
 import torch
+import numpy as np
 
 import sac.utils
 from sac.logger import Logger
@@ -82,7 +83,7 @@ class Workspace(object):
 
             # run training update
             if self.step >= self.cfg.num_seed_steps:
-                self.agent.update_parameters(self.replay_buffer, self.cfg.batch_size, self.step)
+                self.agent.update_parameters(self.replay_buffer, self.cfg.batch_size, self.logger, self.step)
 
             next_obs, reward, done, _, _ = self.env.step(action)
 
@@ -94,6 +95,8 @@ class Workspace(object):
 
 
             obs = next_obs
+            self.agent.obs_upper_bound = np.amax(obs) if self.agent.obs_upper_bound < np.amax(obs) else self.agent.obs_upper_bound
+            self.agent.obs_lower_bound = np.amin(obs) if self.agent.obs_lower_bound > np.amin(obs) else self.agent.obs_lower_bound
             episode_step += 1
             self.step += 1
 

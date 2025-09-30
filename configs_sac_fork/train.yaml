@@ -2,8 +2,8 @@ defaults:
   - agent: sac_fork
   - _self_
 
-#env: BipedalWalker-v3
-env: BipedalWalkerHardcore-v3
+env: BipedalWalker-v3
+#env: BipedalWalkerHardcore-v3
 
 experiment: test_exp
 
