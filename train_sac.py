@@ -86,10 +86,9 @@ class Workspace(object):
 
                 self.logger.log('train/episode', episode, self.step)
 
-            # run training updates (multiple updates per step)
+            # num_updates_per_step is ignored for single env training
             if self.step >= self.cfg.num_seed_steps:
-                for _ in range(num_updates_per_step):
-                    self.agent.update(self.replay_buffer, self.logger, self.step)
+                self.agent.update(self.replay_buffer, self.logger, self.step)
 
             # sample action for data collection
             if self.step < self.cfg.num_seed_steps:
@@ -124,7 +123,7 @@ class Workspace(object):
         self.agent.reset()
 
         while self.step < self.cfg.num_train_steps:
-            # Run training updates (multiple updates per step)
+            # run training updates (multiple updates per step as num_envs samples are collected per step)
             if self.step >= self.cfg.num_seed_steps:
                 for _ in range(num_updates_per_step):
                     self.agent.update(self.replay_buffer, self.logger, self.step)
