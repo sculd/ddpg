@@ -10,6 +10,13 @@ experiment: test_exp
 # Number of parallel environments (set to 1 for single env, 8+ for speedup)
 num_envs: 10
 
+# Number of gradient updates per training step
+# Examples with num_envs=10:
+#   num_updates_per_step: 10 -> 10 samples collected, 10 updates (1:1 ratio)
+#   num_updates_per_step: 5  -> 10 samples collected, 5 updates (2:1 ratio)
+#   num_updates_per_step: 1  -> 10 samples collected, 1 update (10:1 ratio)
+num_updates_per_step: 3
+
 num_train_steps: 2e6
 max_episode_steps: 1500
 replay_buffer_capacity: ${num_train_steps}

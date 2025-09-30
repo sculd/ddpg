@@ -56,6 +56,8 @@ class Workspace(object):
         episode, episode_reward, max_episode_reward, done = 0, 0, 0, True
         episode_step = 0
         start_time = time.time()
+        num_updates_per_step = getattr(self.cfg, 'num_updates_per_step', 1)
+
         while self.step < self.cfg.num_train_steps:
             if done or episode_step >= self.cfg.max_episode_steps:
                 if self.step < self.cfg.num_seed_steps:
@@ -84,9 +86,10 @@ class Workspace(object):
 
                 self.logger.log('train/episode', episode, self.step)
 
-            # run training update
+            # run training updates (multiple updates per step)
             if self.step >= self.cfg.num_seed_steps:
-                self.agent.update(self.replay_buffer, self.logger, self.step)
+                for _ in range(num_updates_per_step):
+                    self.agent.update(self.replay_buffer, self.logger, self.step)
 
             # sample action for data collection
             if self.step < self.cfg.num_seed_steps:
@@ -114,15 +117,17 @@ class Workspace(object):
         episode_steps = np.zeros(self.num_envs, dtype=int)
         max_episode_reward = 0
         start_time = time.time()
+        num_updates_per_step = getattr(self.cfg, 'num_updates_per_step', 1)
 
         # Initialize all environments
         obs, _ = self.env.reset()
         self.agent.reset()
 
         while self.step < self.cfg.num_train_steps:
-            # Run training update
+            # Run training updates (multiple updates per step)
             if self.step >= self.cfg.num_seed_steps:
-                self.agent.update(self.replay_buffer, self.logger, self.step)
+                for _ in range(num_updates_per_step):
+                    self.agent.update(self.replay_buffer, self.logger, self.step)
 
             # Sample actions for all environments (batched)
             if self.step < self.cfg.num_seed_steps:
