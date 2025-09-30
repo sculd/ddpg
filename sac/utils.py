@@ -51,13 +51,31 @@ def make_env(cfg, render_mode):
 
 
 def env_with_cfg(cfg, render_mode=None):
-    env = make_env(cfg, render_mode=render_mode)
-    cfg.agent.obs_dim = env.observation_space.shape[0]
-    cfg.agent.action_dim = env.action_space.shape[0]
-    cfg.agent.action_range = [
-        float(env.action_space.low.min()),
-        float(env.action_space.high.max())
-    ]    
+    # Check if we should use vectorized environments
+    num_envs = getattr(cfg, 'num_envs', 1)
+
+    if num_envs > 1:
+        # Create vectorized environment
+        env = gym.vector.AsyncVectorEnv([
+            lambda: make_env(cfg, render_mode=render_mode)
+            for _ in range(num_envs)
+        ])
+        cfg.agent.obs_dim = env.single_observation_space.shape[0]
+        cfg.agent.action_dim = env.single_action_space.shape[0]
+        cfg.agent.action_range = [
+            float(env.single_action_space.low.min()),
+            float(env.single_action_space.high.max())
+        ]
+    else:
+        # Single environment (original behavior)
+        env = make_env(cfg, render_mode=render_mode)
+        cfg.agent.obs_dim = env.observation_space.shape[0]
+        cfg.agent.action_dim = env.action_space.shape[0]
+        cfg.agent.action_range = [
+            float(env.action_space.low.min()),
+            float(env.action_space.high.max())
+        ]
+
     return env, cfg
 
 

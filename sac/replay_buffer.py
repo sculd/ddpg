@@ -25,15 +25,35 @@ class ReplayBuffer(object):
         return self.capacity if self.full else self.idx
 
     def add(self, obs, action, reward, next_obs, done):
-        np.copyto(self.obses[self.idx], obs)
-        np.copyto(self.actions[self.idx], action)
-        np.copyto(self.rewards[self.idx], reward)
-        np.copyto(self.next_obses[self.idx], next_obs)
-        np.copyto(self.not_dones[self.idx], not done)
+        # Handle both single transitions and batched transitions
+        obs = np.asarray(obs)
+        action = np.asarray(action)
+        reward = np.asarray(reward)
+        next_obs = np.asarray(next_obs)
+        done = np.asarray(done)
 
-        self.idx = (self.idx + 1) % self.capacity
-        if self.idx == 0:
-            self.full = True
+
+        def _add(obs, action, reward, next_obs, done):
+            # Single transition (original behavior)
+            np.copyto(self.obses[self.idx], obs)
+            np.copyto(self.actions[self.idx], action)
+            np.copyto(self.rewards[self.idx], reward)
+            np.copyto(self.next_obses[self.idx], next_obs)
+            np.copyto(self.not_dones[self.idx], not done)
+
+            self.idx = (self.idx + 1) % self.capacity
+            if self.idx == 0:
+                self.full = True
+
+        # Check if this is a batch of transitions
+        if obs.ndim > len(self.obses.shape[1:]):
+            # Batched add: obs has shape (batch_size, *obs_shape)
+            batch_size = obs.shape[0]
+
+            for i in range(batch_size):
+                _add(obs[i], action[i], reward[i], next_obs[i], done[i])
+        else:
+            _add(obs, action, reward, next_obs, done)
 
     def sample(self, batch_size):
         idxs = np.random.randint(0, self.capacity if self.full else self.idx, size=batch_size)

@@ -82,14 +82,23 @@ class SACAgent(Agent):
 
     def act(self, obs, sample=False):
         obs = torch.FloatTensor(obs).to(self.device)
-        obs = obs.unsqueeze(0)
+        # Handle both single observations and batches
+        if obs.ndim == 1:
+            obs = obs.unsqueeze(0)
+            squeeze_output = True
+        else:
+            squeeze_output = False
+
         dist = self.actor(obs)
         action = dist.sample() if sample else dist.mean
         action = action.clamp(*self.action_range)
-        #   1. action.ndim == 2: Action must be a 2D tensor (batch_size × action_dim)
-        #   2. action.shape[0] == 1: Batch size must be exactly 1
-        assert action.ndim == 2 and action.shape[0] == 1
-        return sac.utils.to_np(action[0])
+
+        assert action.ndim == 2  # (batch_size, action_dim)
+
+        if squeeze_output:
+            return sac.utils.to_np(action[0])
+        else:
+            return sac.utils.to_np(action)
 
     def update_critic(self, obs, action, reward, next_obs, not_done, logger, step):
         dist = self.actor(next_obs)
@@ -140,7 +149,7 @@ class SACAgent(Agent):
             logger.log('train_alpha/loss', alpha_loss, step)
             logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.log_alpha, max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_([self.log_alpha], max_norm=1.0)
             self.log_alpha_optimizer.step()
 
     def update(self, replay_buffer, logger, step):

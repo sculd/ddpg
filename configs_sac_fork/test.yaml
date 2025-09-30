@@ -1,9 +1,9 @@
 defaults:
-  - agent: sac
+  - agent: sac_fork
   - _self_
 
-env: BipedalWalker-v3
-#env: BipedalWalkerHardcore-v3
+#env: BipedalWalker-v3
+env: BipedalWalkerHardcore-v3
 
 max_episode_steps: 2000
 num_eval_episodes: 3
