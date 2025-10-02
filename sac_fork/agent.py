@@ -1,40 +1,43 @@
 import copy
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.optim import Adam
 from sac_fork.utils import soft_update, hard_update
-from sac_fork.network import GaussianPolicy, QNetwork, DeterministicPolicy, Sys_R, SysModel
+from sac.network import DoubleQCritic, DiagGaussianActor
+from sac_fork.network import Sys_R, SysModel
 
 
 class SAC_FORK(object):
     def __init__(self, obs_dim, action_space, action_range, device, args, **kwargs):
-        # tba: take care of action_range
+        self.action_range = action_range
 
+        self.device = torch.device(device)
         self.mode = True # training mode
         self.gamma = args.gamma
         self.tau = args.tau
-        self.alpha = args.alpha
+        self.log_alpha = torch.tensor(np.log(args.alpha)).to(self.device)
+        self.log_alpha.requires_grad = True
 
         self.policy_type = args.policy_type
         self.target_update_interval = args.target_update_interval
         self.automatic_entropy_tuning = args.automatic_entropy_tuning
 
-        self.device = torch.device(device)
+        action_dim = action_space.shape[0]
+        self.critic = DoubleQCritic(obs_dim, action_dim, args.hidden_size, 3).to(device=self.device)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=args.lr)
 
-        self.critic = QNetwork(obs_dim, action_space.shape[0], args.hidden_size).to(device=self.device)
-        self.critic_optim = Adam(self.critic.parameters(), lr=args.lr)
-
-        self.critic_target = QNetwork(obs_dim, action_space.shape[0], args.hidden_size).to(self.device)
+        self.critic_target = DoubleQCritic(obs_dim, action_dim, args.hidden_size, 3).to(self.device)
         hard_update(self.critic_target, self.critic)
 
-        self.sysmodel = SysModel(obs_dim, action_space.shape[0], args.sys_hidden_size,args.sys_hidden_size).to(self.device)
-        self.sysmodel_optimizer = Adam(self.sysmodel.parameters(), lr=args.lr)
+        self.sysmodel = SysModel(obs_dim, action_dim, args.sys_hidden_size,args.sys_hidden_size).to(self.device)
+        self.sysmodel_optimizer = torch.optim.Adam(self.sysmodel.parameters(), lr=args.lr)
 
-        self.obs_upper_bound = 0 #state space upper bound
-        self.obs_lower_bound = 0  #state space lower bound
+        # state space upper/lower bound
+        self.obs_upper_bound = 10
+        self.obs_lower_bound = -10
 
-        self.sysr = Sys_R(obs_dim, action_space.shape[0],args.sysr_hidden_size,args.sysr_hidden_size).to(self.device)
+        self.sysr = Sys_R(obs_dim, action_dim,args.sysr_hidden_size,args.sysr_hidden_size).to(self.device)
         self.sysr_optimizer = torch.optim.Adam(self.sysr.parameters(), lr=args.lr)
 
         self.sys_threshold = args.sys_threshold
@@ -42,21 +45,19 @@ class SAC_FORK(object):
         self.sysmodel_loss = 0
         self.sysr_loss = 0
 
-        if self.policy_type == "Gaussian":
-            # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
-            if self.automatic_entropy_tuning is True:
-                self.target_entropy = -torch.prod(torch.Tensor(action_space.shape).to(self.device)).item()
-                self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
-                self.alpha_optim = Adam([self.log_alpha], lr=args.lr)
+        # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
+        if self.automatic_entropy_tuning is True:
+            # set target entropy to -|A|
+            self.target_entropy = -action_dim
+            self.log_alpha_optim = torch.optim.Adam([self.log_alpha], lr=args.lr)
 
-            self.policy = GaussianPolicy(obs_dim, action_space.shape[0], args.hidden_size, action_space).to(self.device)
-            self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
+        self.actor = DiagGaussianActor(obs_dim, action_dim, args.hidden_size, hidden_depth=3).to(self.device)
 
-        else:
-            self.alpha = 0
-            self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(obs_dim, action_space.shape[0], args.hidden_size, action_space).to(self.device)
-            self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=args.lr)
+
+    @property
+    def alpha(self):
+        return self.log_alpha.exp()
 
     def reset(self):
         pass
@@ -67,121 +68,151 @@ class SAC_FORK(object):
         if mode:
             self.sysr.train()
             self.sysmodel.train()
-            self.policy.train()
+            self.actor.train()
             self.critic.train()
         else:
             self.sysr.eval()
             self.sysmodel.eval()
-            self.policy.eval()
+            self.actor.eval()
             self.critic.eval()
 
-    def select_action(self, state, evaluate=False):
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-        if evaluate is False:
-            action, _, _ = self.policy.sample(state)
+    def act(self, state, evaluate=False):
+        state = torch.FloatTensor(state).to(self.device)
+        # Handle both single observations and batches
+        if state.ndim == 1:
+            state = state.unsqueeze(0)
+            squeeze_output = True
         else:
-            _, _, action = self.policy.sample(state)
-        return action.detach().cpu().numpy()[0]
+            squeeze_output = False
 
-    def update_parameters(self, memory, batch_size, logger, updates):
-        # Sample a batch from memory
-        state_batch, action_batch, reward_batch, next_state_batch, mask_batch = memory.sample(batch_size=batch_size)
+        dist = self.actor(state)
+        action = dist.sample() if not evaluate else dist.mean
+        action = action.clamp(*self.action_range)
 
-        logger.log('train/batch_reward', reward_batch.mean(), updates)
+        action = action.detach().cpu().numpy()
+        if squeeze_output:
+            return action[0]
+        else:
+            return action
 
-        state_batch = torch.FloatTensor(state_batch).to(self.device)
-        next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
-        action_batch = torch.FloatTensor(action_batch).to(self.device)
-        reward_batch = torch.FloatTensor(reward_batch).to(self.device).unsqueeze(1)
-        mask_batch = torch.FloatTensor(mask_batch).to(self.device).unsqueeze(1)
+    def update_critic(self, states, actions, rewards, next_states, masks, logger, step):
+        dist = self.actor(next_states)
+        next_action = dist.rsample()
+        log_prob = dist.log_prob(next_action).sum(-1, keepdim=True)
+        target_Q1, target_Q2 = self.critic_target(next_states, next_action)
+        target_V = torch.min(target_Q1, target_Q2) - self.alpha.detach() * log_prob
+        target_Q = rewards + (masks * self.gamma * target_V)
+        target_Q = target_Q.detach()
 
-        with torch.no_grad():
-            next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
-            qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
-            min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
-            next_q_value = reward_batch + mask_batch * self.gamma * (min_qf_next_target)
-        qf1, qf2 = self.critic(state_batch, action_batch)  # Two Q-functions to mitigate positive bias in the policy improvement step
-        qf1_loss = F.mse_loss(qf1, next_q_value)  # JQ = 𝔼(st,at)~D[0.5(Q1(st,at) - r(st,at) - γ(𝔼st+1~p[V(st+1)]))^2]
-        qf2_loss = F.mse_loss(qf2, next_q_value)  # JQ = 𝔼(st,at)~D[0.5(Q1(st,at) - r(st,at) - γ(𝔼st+1~p[V(st+1)]))^2]
-        qf_loss = qf1_loss + qf2_loss
+        # get current Q estimates
+        current_Q1, current_Q2 = self.critic(states, actions)
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        self.critic_optim.zero_grad()
-        qf_loss.backward()
-        self.critic_optim.step()
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0)
+        self.critic_optimizer.step()
+
+        self.critic.log(logger, step)
 
 
-        predict_next_state = self.sysmodel(state_batch, action_batch)
-        predict_next_state = predict_next_state.clamp(self.obs_lower_bound,self.obs_upper_bound)
-        sysmodel_loss = F.smooth_l1_loss(predict_next_state, next_state_batch.detach())
+    def update_actor(self, states, actions, rewards, next_states, logger,step):
+        dist = self.actor(states)
+        action = dist.rsample()
+        log_prob = dist.log_prob(action).sum(-1, keepdim=True)
+        actor_Q1, actor_Q2 = self.critic(states, action)
+
+        actor_Q = torch.min(actor_Q1, actor_Q2)
+        actor_loss = (self.alpha.detach() * log_prob - actor_Q).mean()
+
+        # fork logic
+        predict_next_state = self.sysmodel(states, actions)
+        predict_next_state = predict_next_state.clamp(self.obs_lower_bound, self.obs_upper_bound)
+        sysmodel_loss = F.smooth_l1_loss(predict_next_state, next_states.detach())
         self.sysmodel_optimizer.zero_grad()
         sysmodel_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.sysmodel.parameters(), max_norm=1.0)
         self.sysmodel_optimizer.step()
         self.sysmodel_loss = sysmodel_loss.item()
 
-        predict_reward = self.sysr(state_batch,next_state_batch,action_batch)
-        sysr_loss = F.mse_loss(predict_reward, reward_batch.detach())
+        predict_reward = self.sysr(states,next_states,actions)
+        sysr_loss = F.mse_loss(predict_reward, rewards.detach())
         self.sysr_optimizer.zero_grad()
         sysr_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.sysr.parameters(), max_norm=1.0)
         self.sysr_optimizer.step()
         self.sysr_loss = sysr_loss.item()
 
         s_flag = 1 if sysmodel_loss.item() < self.sys_threshold else 0
 
-        pi, log_pi, _ = self.policy.sample(state_batch)
-
-        qf1_pi, qf2_pi = self.critic(state_batch, pi)
-        min_qf_pi = torch.min(qf1_pi, qf2_pi)
-
-        policy_loss = ((self.alpha * log_pi) - min_qf_pi).mean() # Jπ = 𝔼st∼D,εt∼N[α * logπ(f(εt;st)|st) − Q(st,f(εt;st))]
-
         if s_flag == 1 and self.sys_weight != 0:
-            p_next_state = self.sysmodel(state_batch,pi)
-            p_next_state = p_next_state.clamp(self.obs_lower_bound,self.obs_upper_bound)
-            p_next_r = self.sysr(state_batch,p_next_state.detach(),pi)
+            p_next_state = self.sysmodel(states, actions).clamp(self.obs_lower_bound, self.obs_upper_bound)
+            p_next_r = self.sysr(states, p_next_state.detach(), actions)
 
-            pi2, log_pi2, _ = self.policy.sample(p_next_state.detach())
-            p_next_state2 = self.sysmodel(p_next_state,pi2)
-            p_next_state2 = p_next_state2.clamp(self.obs_lower_bound,self.obs_upper_bound)
-            p_next_r2 = self.sysr(p_next_state.detach(),p_next_state2.detach(),pi2)
+            dist2 = self.actor(p_next_state.detach())
+            action2 = dist2.rsample()
+            log_prob2 = dist2.log_prob(action2).sum(-1, keepdim=True)
+            p_next_state2 = self.sysmodel(p_next_state, action2).clamp(self.obs_lower_bound, self.obs_upper_bound)
+            p_next_r2 = self.sysr(p_next_state.detach(), p_next_state2.detach(), action2)
 
-            pi3, log_pi3, _ = self.policy.sample(p_next_state2.detach())
-            qf3_pi, qf4_pi = self.critic(p_next_state2.detach(), pi3)
-            min_qf_pi2 = torch.min(qf3_pi, qf4_pi)
+            dist3 = self.actor(p_next_state2.detach())
+            action3 = dist3.rsample()
+            log_prob3 = dist3.log_prob(action3).sum(-1, keepdim=True)
 
-            #sys_loss = (-p_next_r -self.gamma * p_next_r2 + self.gamma ** 2 * ((self.alpha * log_pi3) - min_qf_pi2)).mean()
-            sys_loss = (-p_next_r + self.alpha * log_pi - self.gamma * (p_next_r2 - self.alpha * log_pi2)  + self.gamma ** 2 * ((self.alpha * log_pi3) - min_qf_pi2)).mean()
-            policy_loss += self.sys_weight * sys_loss
+            qf3, qf4 = self.critic(p_next_state2.detach(), action3)
+            qf34 = torch.min(qf3, qf4)
 
-        self.policy_optim.zero_grad()
-        policy_loss.backward()
-        self.policy_optim.step()
+            sys_loss = -((p_next_r - self.alpha * log_prob) + self.gamma * (p_next_r2 - self.alpha * log_prob2) + self.gamma ** 2 * (qf34 - self.alpha * log_prob3)).mean()
+            actor_loss += self.sys_weight * sys_loss
 
+        logger.log('train_actor/loss', actor_loss, step)
+        logger.log('train_actor/target_entropy', self.target_entropy, step)
+        logger.log('train_actor/entropy', -log_prob.mean(), step)
+
+        # optimize the actor
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
+        self.actor_optimizer.step()
+
+        self.actor.log(logger, step)
 
         if self.automatic_entropy_tuning:
-            alpha_loss = -(self.log_alpha * (log_pi + self.target_entropy).detach()).mean()
-
-            self.alpha_optim.zero_grad()
+            self.log_alpha_optim.zero_grad()
+            alpha_loss = (self.alpha * (-log_prob - self.target_entropy).detach()).mean()
+            logger.log('train_alpha/loss', alpha_loss, step)
+            logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
-            self.alpha_optim.step()
+            torch.nn.utils.clip_grad_norm_([self.log_alpha], max_norm=1.0)
+            self.log_alpha_optim.step()
 
-            self.alpha = self.log_alpha.exp()
-            alpha_tlogs = self.alpha.clone() # For TensorboardX logs
-        else:
-            alpha_loss = torch.tensor(0.).to(self.device)
-            alpha_tlogs = torch.tensor(self.alpha) # For TensorboardX logs
-
-        if updates % self.target_update_interval == 0:
+        if step % self.target_update_interval == 0:
             soft_update(self.critic_target, self.critic, self.tau)
 
-        return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
+    
+    def update(self, replay_buffer, batch_size, logger, step):
+        states, actions, rewards, next_states, masks = replay_buffer.sample(batch_size=batch_size)
+
+        states = torch.FloatTensor(states).to(self.device)
+        next_states = torch.FloatTensor(next_states).to(self.device)
+        actions = torch.FloatTensor(actions).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device).unsqueeze(1)
+        masks = torch.FloatTensor(masks).to(self.device).unsqueeze(1)
+
+        logger.log('train/batch_reward', rewards.mean(), step)
+
+        self.update_critic(states, actions, rewards, next_states, masks, logger, step)
+        self.update_actor(states, actions, rewards, next_states, logger, step)
+
 
     # Save model parameters
     def save(self, filename):
         torch.save(self.critic.state_dict(), filename + "_critic")
-        torch.save(self.critic_optim.state_dict(), filename + "_critic_optimizer")
+        torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
 
-        torch.save(self.policy.state_dict(), filename + "_actor")
-        torch.save(self.policy_optim.state_dict(), filename + "_actor_optimizer")
+        torch.save(self.actor.state_dict(), filename + "_actor")
+        torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
 
         torch.save(self.sysmodel.state_dict(), filename + "_sysmodel")
         torch.save(self.sysmodel_optimizer.state_dict(), filename + "_sysmodel_optimizer")
@@ -191,11 +222,11 @@ class SAC_FORK(object):
 
     def load(self, filename):
         self.critic.load_state_dict(torch.load(filename + "_critic"))
-        self.critic_optim.load_state_dict(torch.load(filename + "_critic_optimizer"))
+        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
         self.critic_target = copy.deepcopy(self.critic)
 
-        self.policy.load_state_dict(torch.load(filename + "_actor"))
-        self.policy_optim.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.actor.load_state_dict(torch.load(filename + "_actor"))
+        self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
 
         self.sysmodel.load_state_dict(torch.load(filename + "_sysmodel"))
         self.sysmodel_optimizer.load_state_dict(torch.load(filename + "_sysmodel_optimizer"))

@@ -1,7 +1,12 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import distributions as pyd
 from torch.distributions import Normal
+
+import sac.utils
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
@@ -12,53 +17,6 @@ def weights_init_(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
         torch.nn.init.constant_(m.bias, 0)
-
-
-class ValueNetwork(nn.Module):
-    def __init__(self, num_inputs, hidden_dim):
-        super(ValueNetwork, self).__init__()
-
-        self.linear1 = nn.Linear(num_inputs, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear3 = nn.Linear(hidden_dim, 1)
-
-        self.apply(weights_init_)
-
-    def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = self.linear3(x)
-        return x
-
-
-class QNetwork(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_dim):
-        super(QNetwork, self).__init__()
-
-        # Q1 architecture
-        self.linear1 = nn.Linear(num_inputs + num_actions, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear3 = nn.Linear(hidden_dim, 1)
-
-        # Q2 architecture
-        self.linear4 = nn.Linear(num_inputs + num_actions, hidden_dim)
-        self.linear5 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear6 = nn.Linear(hidden_dim, 1)
-
-        self.apply(weights_init_)
-
-    def forward(self, state, action):
-        xu = torch.cat([state, action], 1)
-
-        x1 = F.relu(self.linear1(xu))
-        x1 = F.relu(self.linear2(x1))
-        x1 = self.linear3(x1)
-
-        x2 = F.relu(self.linear4(xu))
-        x2 = F.relu(self.linear5(x2))
-        x2 = self.linear6(x2)
-
-        return x1, x2
 
 
 class GaussianPolicy(nn.Module):
@@ -111,80 +69,26 @@ class GaussianPolicy(nn.Module):
         return super(GaussianPolicy, self).to(device)
 
 
-class DeterministicPolicy(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_dim, action_space=None):
-        super(DeterministicPolicy, self).__init__()
-        self.linear1 = nn.Linear(num_inputs, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-
-        self.mean = nn.Linear(hidden_dim, num_actions)
-        self.noise = torch.Tensor(num_actions)
-
-        self.apply(weights_init_)
-
-        # action rescaling
-        if action_space is None:
-            self.action_scale = 1.
-            self.action_bias = 0.
-        else:
-            self.action_scale = torch.FloatTensor(
-                (action_space.high - action_space.low) / 2.)
-            self.action_bias = torch.FloatTensor(
-                (action_space.high + action_space.low) / 2.)
-
-    def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        mean = torch.tanh(self.mean(x)) * self.action_scale + self.action_bias
-        return mean
-
-    def sample(self, state):
-        mean = self.forward(state)
-        noise = self.noise.normal_(0., std=0.1)
-        noise = noise.clamp(-0.25, 0.25)
-        action = mean + noise
-        return action, torch.tensor(0.), mean
-
-    def to(self, device):
-        self.action_scale = self.action_scale.to(device)
-        self.action_bias = self.action_bias.to(device)
-        self.noise = self.noise.to(device)
-        return super(DeterministicPolicy, self).to(device)
-
-
 class Sys_R(nn.Module):
-	def __init__(self,state_dim, action_dim, fc1_units, fc2_units):
-		super(Sys_R, self).__init__()
+    def __init__(self, state_dim, action_dim, fc1_units, fc2_units):
+        super(Sys_R, self).__init__()
 
-		# Q1 architecture
-		self.l1 = nn.Linear(2 * state_dim + action_dim,fc1_units)
-		self.l2 = nn.Linear(fc1_units, fc2_units)
-		self.l3 = nn.Linear(fc2_units, 1)
-		self.apply(weights_init_)
+        self.R = sac.utils.mlp(2 * state_dim + action_dim, int((fc1_units + fc2_units) // 2), 1, 3)
+        self.apply(sac.utils.weight_init)
 
-
-	def forward(self, state,next_state, action):
-		sa = torch.cat([state,next_state, action], 1)
-
-		q1 = F.relu(self.l1(sa))
-		q1 = F.relu(self.l2(q1))
-		q1 = self.l3(q1)
-		return q1
+    def forward(self, state, next_state, action):
+        sa = torch.cat([state, next_state, action], 1)
+        return self.R(sa)
 
 
 class SysModel(nn.Module):
-	def __init__(self, state_size, action_size, fc1_units, fc2_units):
-		super(SysModel, self).__init__()
-		self.l1 = nn.Linear(state_size + action_size, fc1_units)
-		self.l2 = nn.Linear(fc1_units, fc2_units)
-		self.l3 = nn.Linear(fc2_units, state_size)
-		self.apply(weights_init_)
+    def __init__(self, state_size, action_size, fc1_units, fc2_units):
+        super(SysModel, self).__init__()
 
-	def forward(self, state, action):
-		"""Build a system model to predict the next state at a given state."""
-		xa = torch.cat([state, action], 1)
+        self.SR = sac.utils.mlp(state_size + action_size, int((fc1_units + fc2_units) // 2), state_size, 3)
+        self.apply(sac.utils.weight_init)
 
-		x1 = F.relu(self.l1(xa))
-		x1 = F.relu(self.l2(x1))
-		x1 = self.l3(x1)
-		return x1
+    def forward(self, state, action):
+        """Build a system model to predict the next state at a given state."""
+        xa = torch.cat([state, action], 1)
+        return self.SR(xa)
