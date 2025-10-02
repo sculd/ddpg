@@ -7,13 +7,13 @@ device: ${device}
 args:
   gamma: 0.99
   tau: 0.005
-  alpha: 0.2
+  alpha: 0.1
   policy_type: "Gaussian"
-  target_update_interval: 1
-  automatic_entropy_tuning: false
-  lr: 0.0003
-  hidden_size: 256
+  target_update_interval: 2
+  automatic_entropy_tuning: true
+  lr: 1e-4
+  hidden_size: 1024
   sys_hidden_size: 512
-  sys_weight: 0.6
+  sys_weight: 0.5
   sys_threshold: 0.020
   sysr_hidden_size: 512
