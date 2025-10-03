@@ -58,7 +58,8 @@ class Workspace(object):
 
     def _run_single(self):
         """Original single environment training loop"""
-        episode, episode_reward, max_episode_reward, done = 0, 0, 0, True
+        episode, episode_reward, done = 0, 0, True
+        max_episode_reward = 0
         episode_step = 0
         start_time = time.time()
         while self.step < self.cfg.num_train_steps:
@@ -71,14 +72,14 @@ class Workspace(object):
 
                 # evaluate agent periodically
                 if (episode + 1) % self.cfg.eval_frequency == 0:
-                    if max_episode_reward < self.cfg.target_score:
+                    if episode_reward > self.cfg.target_score:
                         self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
 
                 self.logger.log('train/episode_reward', episode_reward, self.step)
 
-                max_episode_reward = max(max_episode_reward, episode_reward)
-                if episode_reward > self.cfg.target_score:
+                if episode_reward > max_episode_reward:
                     self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                max_episode_reward = max(max_episode_reward, episode_reward)
 
                 obs, _ = self.env.reset()
                 self.agent.reset()
@@ -163,18 +164,17 @@ class Workspace(object):
                     if self.step < self.cfg.num_seed_steps:
                         print(f"Episode {episode} (env {i}) completed at step {self.step}, reward: {episode_rewards[i]:.2f}")
 
-                    self.logger.log('train/episode_reward', episode_rewards[i], self.step)
-
-                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
-                    if episode_rewards[i] > self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
-
                     episode += 1
+                    self.logger.log('train/episode_reward', episode_rewards[i], self.step)
                     self.logger.log('train/episode', episode, self.step)
 
                     if episode % self.cfg.eval_frequency == 0:
-                        if max_episode_reward < self.cfg.target_score:
+                        if episode_rewards[i] > self.cfg.target_score:
                             self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+
+                    if episode_rewards[i] > max_episode_reward:
+                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
 
                     # Reset counters for completed environments
                     episode_rewards[i] = 0

@@ -66,16 +66,16 @@ class Workspace(object):
                 start_time = time.time()
                 self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
 
-                # evaluate agent periodically
-                if (episode + 1) % self.cfg.eval_frequency == 0:
-                    if max_episode_reward < self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
-
                 self.logger.log('train/episode_reward', episode_reward, self.step)
 
-                max_episode_reward = max(max_episode_reward, episode_reward)
-                if episode_reward > self.cfg.target_score:
+                # evaluate agent periodically
+                if (episode + 1) % self.cfg.eval_frequency == 0:
+                    if episode_reward > self.cfg.target_score:
+                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+
+                if episode_reward > max_episode_reward:
                     self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+                max_episode_reward = max(max_episode_reward, episode_reward)
 
                 obs, _ = self.env.reset()
                 self.agent.reset()
@@ -151,18 +151,17 @@ class Workspace(object):
                     if self.step < self.cfg.num_seed_steps:
                         print(f"Episode {episode} (env {i}) completed at step {self.step}, reward: {episode_rewards[i]:.2f}")
 
-                    self.logger.log('train/episode_reward', episode_rewards[i], self.step)
-
-                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
-                    if episode_rewards[i] > self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
-
                     episode += 1
+                    self.logger.log('train/episode_reward', episode_rewards[i], self.step)
                     self.logger.log('train/episode', episode, self.step)
 
                     if episode % self.cfg.eval_frequency == 0:
-                        if max_episode_reward < self.cfg.target_score:
+                        if episode_rewards[i] > self.cfg.target_score:
                             self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+
+                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
+                    if episode_rewards[i] > max_episode_reward:
+                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
 
                     episode_rewards[i] = 0
                     episode_steps[i] = 0
