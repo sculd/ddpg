@@ -169,6 +169,9 @@ class SAC_FORK(object):
         logger.log('train_actor/loss', actor_loss, step)
         logger.log('train_actor/target_entropy', self.target_entropy, step)
         logger.log('train_actor/entropy', -log_prob.mean(), step)
+        logger.log('train_sysmodel/sysmodel_loss', sysmodel_loss.item(), step)
+        logger.log('train_sysmodel/s_flag', s_flag, step)
+        logger.log('train_sysr/sysr_loss', sysr_loss.item(), step)
 
         # optimize the actor
         self.actor_optimizer.zero_grad()
