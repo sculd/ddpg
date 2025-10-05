@@ -3,8 +3,8 @@ import os
 import time
 
 import hydra
-import torch
 import numpy as np
+import torch
 
 import sac.utils
 from sac.logger import Logger

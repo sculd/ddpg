@@ -3,9 +3,10 @@ import copy
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sac_fork.utils import soft_update, hard_update
-from sac.network import DoubleQCritic, DiagGaussianActor
+
+from sac.network import DiagGaussianActor, DoubleQCritic
 from sac_fork.network import Sys_R, SysModel
+from sac_fork.utils import hard_update, soft_update
 
 
 class SAC_FORK(object):

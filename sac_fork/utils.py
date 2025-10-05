@@ -1,6 +1,7 @@
+import math
+
 import numpy as np
 import torch
-import math
 
 
 class ReplayBuffer(object):
