@@ -1,4 +1,4 @@
-# DUPG - Improved DDPG
+# Reinforcement Learning On Bipedal Walker
 
 DDPG = Deep Deterministic Policy Gradient
 SAC = Soft Actor Critic
@@ -9,7 +9,7 @@ FORK = Foward Looking
 * SAC: https://arxiv.org/abs/1801.01290
 * FORK: https://arxiv.org/abs/2010.01652
 
-Env: `LunarLander-v3-continuous`, and its `Hardcore` variant (much harder).
+Env: `BipedalWalker-v3`, and its `BipedalWalkerHardcore-v3` variant (much harder).
 
 ## Result
 #### DDPG
