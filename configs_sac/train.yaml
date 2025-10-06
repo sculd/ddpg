@@ -32,8 +32,9 @@ device: cuda
 log_frequency: 100000
 log_save_tb: true
 
-# Enable profiling (cProfile + PyTorch Profiler)
-profile: true
+# Profiling options (enable independently)
+profile_cprofile: true  # Python-level profiling (low overhead, good for hotspot analysis)
+profile_torch: false     # PyTorch operator profiling (higher overhead, GPU/CPU details)
 
 seed: 1
 

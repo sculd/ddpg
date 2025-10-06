@@ -212,23 +212,33 @@ class Workspace(object):
 def main(cfg):
     env, cfg = sac.utils.env_with_cfg(cfg)
 
-    # Check if profiling is enabled
-    enable_profiling = cfg.get('profile', False)
+    # Check which profilers are enabled
+    enable_cprofile = cfg.get('profile_cprofile', False)
+    enable_torch_profile = cfg.get('profile_torch', False)
 
-    if enable_profiling:
-        # Create profile output directory
+    # Setup output paths if profiling is enabled
+    if enable_cprofile or enable_torch_profile:
         profile_dir = os.path.join(os.getcwd(), 'profiles')
         os.makedirs(profile_dir, exist_ok=True)
-        cprofile_output = os.path.join(profile_dir, 'training_profile.prof')
-        torch_profile_dir = os.path.join(profile_dir, 'torch_profiler')
 
+    # Setup cProfile
+    if enable_cprofile:
+        cprofile_output = os.path.join(profile_dir, 'training_profile.prof')
         print(f"\n{'='*60}")
-        print(f"Profiling ENABLED")
-        print(f"cProfile output: {cprofile_output}")
-        print(f"PyTorch Profiler output: {torch_profile_dir}")
+        print(f"cProfile ENABLED")
+        print(f"Output: {cprofile_output}")
+        print(f"{'='*60}\n")
+    else:
+        cprofile_output = None
+
+    # Setup PyTorch profiler
+    if enable_torch_profile:
+        torch_profile_dir = os.path.join(profile_dir, 'torch_profiler')
+        print(f"\n{'='*60}")
+        print(f"PyTorch Profiler ENABLED")
+        print(f"Output: {torch_profile_dir}")
         print(f"{'='*60}\n")
 
-        # Setup PyTorch profiler
         # Profile first 5 steps, then skip 5, then profile 5 more (to capture warmup and steady state)
         torch_profiler = profile(
             activities=[ProfilerActivity.CPU],  # CPU only to avoid CUPTI warnings
@@ -239,31 +249,39 @@ def main(cfg):
             with_stack=True
         )
     else:
-        print(f"\n{'='*60}")
-        print(f"Profiling DISABLED (use profile=true to enable)")
-        print(f"{'='*60}\n")
         torch_profiler = None
-        cprofile_output = None
+        torch_profile_dir = None
+
+    if not enable_cprofile and not enable_torch_profile:
+        print(f"\n{'='*60}")
+        print(f"Profiling DISABLED")
+        print(f"Enable with: profile_cprofile=true or profile_torch=true")
+        print(f"{'='*60}\n")
 
     # Create workspace with torch profiler
     workspace = Workspace(env, cfg, torch_profiler=torch_profiler)
 
-    if enable_profiling:
-        # Profile the training run with cProfile
+    # Start cProfile if enabled
+    if enable_cprofile:
         cprofiler = cProfile.Profile()
         cprofiler.enable()
 
-        try:
+    try:
+        # Run with or without torch profiler context
+        if enable_torch_profile:
             with torch_profiler:
                 workspace.run()
-        finally:
+        else:
+            workspace.run()
+    finally:
+        # Stop and save cProfile if enabled
+        if enable_cprofile:
             cprofiler.disable()
-
-            # Save cProfile data
             cprofiler.dump_stats(cprofile_output)
+
             print(f"\n{'='*60}")
-            print(f"Profiling complete!")
-            print(f"\n--- cProfile: Top 20 Time-Consuming Functions ---\n")
+            print(f"cProfile complete!")
+            print(f"\n--- Top 20 Time-Consuming Functions ---\n")
 
             # Print cProfile summary statistics
             stats = pstats.Stats(cprofiler)
@@ -272,14 +290,17 @@ def main(cfg):
             stats.print_stats(20)
 
             print(f"\n{'='*60}")
-            print(f"To visualize cProfile with snakeviz:")
+            print(f"To visualize with snakeviz:")
             print(f"  snakeviz {cprofile_output}")
-            print(f"\nTo visualize PyTorch Profiler with TensorBoard:")
+            print(f"{'='*60}\n")
+
+        # Print torch profiler info if enabled
+        if enable_torch_profile:
+            print(f"\n{'='*60}")
+            print(f"PyTorch Profiler complete!")
+            print(f"To visualize with TensorBoard:")
             print(f"  tensorboard --logdir={torch_profile_dir}")
             print(f"{'='*60}\n")
-    else:
-        # Run without profiling
-        workspace.run()
 
 
 if __name__ == '__main__':
