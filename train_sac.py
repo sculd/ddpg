@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
+import cProfile
+import pstats
 import os
 import time
+from contextlib import contextmanager
 
 import hydra
 import numpy as np
 import torch
+from torch.profiler import profile, record_function, ProfilerActivity
 
 import sac.utils
 from sac.logger import Logger
 from sac.replay_buffer import ReplayBuffer
 
 
+@contextmanager
+def maybe_record_function(name, enabled=True):
+    """Conditional profiling context manager with zero overhead when disabled."""
+    if enabled:
+        with record_function(name):
+            yield
+    else:
+        yield
+
+
 class Workspace(object):
-    def __init__(self, env, cfg):
+    def __init__(self, env, cfg, torch_profiler=None):
         self.work_dir = os.getcwd()
         print(f'workspace: {self.work_dir}')
 
@@ -20,6 +34,8 @@ class Workspace(object):
         self.cfg = cfg
         self.num_envs = getattr(cfg, 'num_envs', 1)
         self.is_vectorized = self.num_envs > 1
+        self.torch_profiler = torch_profiler
+        self.profiling_enabled = torch_profiler is not None
 
         self.logger = Logger(self.work_dir,
                              save_tb=cfg.log_save_tb,
@@ -88,26 +104,34 @@ class Workspace(object):
 
             # num_updates_per_step is ignored for single env training
             if self.step >= self.cfg.num_seed_steps:
-                self.agent.update(self.replay_buffer, self.logger, self.step)
+                with maybe_record_function("agent_update", self.profiling_enabled):
+                    self.agent.update(self.replay_buffer, self.logger, self.step)
 
             # sample action for data collection
             if self.step < self.cfg.num_seed_steps:
                 action = self.env.action_space.sample()
             else:
                 with sac.utils.eval_mode(self.agent):
-                    action = self.agent.act(obs, sample=True)
+                    with maybe_record_function("agent_act", self.profiling_enabled):
+                        action = self.agent.act(obs, sample=True)
 
-            next_obs, reward, done, _, _ = self.env.step(action)
+            with maybe_record_function("env_step", self.profiling_enabled):
+                next_obs, reward, done, _, _ = self.env.step(action)
 
             # allow infinite bootstrap
             done = float(done)
             episode_reward += reward
 
-            self.replay_buffer.add(obs, action, reward, next_obs, done)
+            with maybe_record_function("replay_buffer_add", self.profiling_enabled):
+                self.replay_buffer.add(obs, action, reward, next_obs, done)
 
             obs = next_obs
             episode_step += 1
             self.step += 1
+
+            # PyTorch profiler step
+            if self.torch_profiler is not None:
+                self.torch_profiler.step()
 
     def _run_vectorized(self):
         """Vectorized environment training loop"""
@@ -125,22 +149,26 @@ class Workspace(object):
         while self.step < self.cfg.num_train_steps:
             # run training updates (multiple updates per step as num_envs samples are collected per step)
             if self.step >= self.cfg.num_seed_steps:
-                for _ in range(num_updates_per_step):
-                    self.agent.update(self.replay_buffer, self.logger, self.step)
+                with maybe_record_function("agent_update", self.profiling_enabled):
+                    for _ in range(num_updates_per_step):
+                        self.agent.update(self.replay_buffer, self.logger, self.step)
 
             # Sample actions for all environments (batched)
             if self.step < self.cfg.num_seed_steps:
                 action = np.array([self.env.single_action_space.sample() for _ in range(self.num_envs)])
             else:
                 with sac.utils.eval_mode(self.agent):
-                    # Pass all observations at once (batched operation)
-                    action = self.agent.act(obs, sample=True)
+                    with maybe_record_function("agent_act", self.profiling_enabled):
+                        # Pass all observations at once (batched operation)
+                        action = self.agent.act(obs, sample=True)
 
             # Step all environments
-            next_obs, rewards, dones, _, _ = self.env.step(action)
+            with maybe_record_function("env_step", self.profiling_enabled):
+                next_obs, rewards, dones, _, _ = self.env.step(action)
             # Check for episode termination (including max steps)
             terminated = dones | (episode_steps >= self.cfg.max_episode_steps)
-            self.replay_buffer.add(obs, action, rewards, next_obs, terminated.astype(np.float32))
+            with maybe_record_function("replay_buffer_add", self.profiling_enabled):
+                self.replay_buffer.add(obs, action, rewards, next_obs, terminated.astype(np.float32))
 
             # Update episode stats
             episode_rewards += rewards
@@ -171,15 +199,87 @@ class Workspace(object):
 
             # Log duration periodically
             if self.step % self.cfg.log_frequency < self.num_envs:
-                self.logger.log('train/duration', time.time() - start_time, self.step)
-                start_time = time.time()
-                self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
+                with maybe_record_function("logging", self.profiling_enabled):
+                    self.logger.log('train/duration', time.time() - start_time, self.step)
+                    start_time = time.time()
+                    self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
+
+            # PyTorch profiler step
+            if self.torch_profiler is not None:
+                self.torch_profiler.step()
 
 @hydra.main(version_base=None, config_path="configs_sac", config_name="train.yaml")
 def main(cfg):
     env, cfg = sac.utils.env_with_cfg(cfg)
-    workspace = Workspace(env, cfg)
-    workspace.run()
+
+    # Check if profiling is enabled
+    enable_profiling = cfg.get('profile', False)
+
+    if enable_profiling:
+        # Create profile output directory
+        profile_dir = os.path.join(os.getcwd(), 'profiles')
+        os.makedirs(profile_dir, exist_ok=True)
+        cprofile_output = os.path.join(profile_dir, 'training_profile.prof')
+        torch_profile_dir = os.path.join(profile_dir, 'torch_profiler')
+
+        print(f"\n{'='*60}")
+        print(f"Profiling ENABLED")
+        print(f"cProfile output: {cprofile_output}")
+        print(f"PyTorch Profiler output: {torch_profile_dir}")
+        print(f"{'='*60}\n")
+
+        # Setup PyTorch profiler
+        # Profile first 5 steps, then skip 5, then profile 5 more (to capture warmup and steady state)
+        torch_profiler = profile(
+            activities=[ProfilerActivity.CPU],  # CPU only to avoid CUPTI warnings
+            schedule=torch.profiler.schedule(wait=1, warmup=2, active=5, repeat=2),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(torch_profile_dir),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True
+        )
+    else:
+        print(f"\n{'='*60}")
+        print(f"Profiling DISABLED (use profile=true to enable)")
+        print(f"{'='*60}\n")
+        torch_profiler = None
+        cprofile_output = None
+
+    # Create workspace with torch profiler
+    workspace = Workspace(env, cfg, torch_profiler=torch_profiler)
+
+    if enable_profiling:
+        # Profile the training run with cProfile
+        cprofiler = cProfile.Profile()
+        cprofiler.enable()
+
+        try:
+            with torch_profiler:
+                workspace.run()
+        finally:
+            cprofiler.disable()
+
+            # Save cProfile data
+            cprofiler.dump_stats(cprofile_output)
+            print(f"\n{'='*60}")
+            print(f"Profiling complete!")
+            print(f"\n--- cProfile: Top 20 Time-Consuming Functions ---\n")
+
+            # Print cProfile summary statistics
+            stats = pstats.Stats(cprofiler)
+            stats.strip_dirs()
+            stats.sort_stats('cumulative')
+            stats.print_stats(20)
+
+            print(f"\n{'='*60}")
+            print(f"To visualize cProfile with snakeviz:")
+            print(f"  snakeviz {cprofile_output}")
+            print(f"\nTo visualize PyTorch Profiler with TensorBoard:")
+            print(f"  tensorboard --logdir={torch_profile_dir}")
+            print(f"{'='*60}\n")
+    else:
+        # Run without profiling
+        workspace.run()
 
 
 if __name__ == '__main__':

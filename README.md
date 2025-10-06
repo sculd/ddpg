@@ -36,3 +36,10 @@ Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/a
 ## Environments
 
 * Pytorch >= 2.5.1
+
+## Profiling
+`train_sac.py` has profiling implemented. After running with `--profile` flag, run
+```
+$ snakeviz profiles/training_profile.prof
+$ tensorboard --logdir=./profiles/torch_profilerer
+```
