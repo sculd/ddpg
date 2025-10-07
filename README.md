@@ -24,10 +24,14 @@ SAC augments DDPG with entropy term in the score thus it can achieve learning th
 
 <img src="images/episode_reward_sac_nonhardcore.png" width="50%" height="50%">
 
+<img src="images/animation_sac_nonhardcore.gif" width="50%" height="50%">
+
 #### SAC-FORK (Hardcore)
 SAC-FORK augments SAC by adding forward looking term. This allwos it to achieve learning the hardcore environment after ~10M steps.
 
 <img src="images/episode_reward_sac_fork_hardcore.png" width="50%" height="50%">
+
+<img src="images/animation_sac_fork_hardcore.gif" width="50%" height="50%">
 
 ## Batchsize
 Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/abs/1509.02971), suggests a smaller batch size of 16, but my observation does not align with it.
