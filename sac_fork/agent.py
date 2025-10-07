@@ -120,12 +120,12 @@ class SAC_FORK(object):
 
     def update_actor(self, states, actions, rewards, next_states, logger,step):
         dist = self.actor(states)
-        action = dist.rsample()
-        log_prob = dist.log_prob(action).sum(-1, keepdim=True)
-        actor_Q1, actor_Q2 = self.critic(states, action)
+        action_sampled = dist.rsample()
+        log_prob = dist.log_prob(action_sampled).sum(-1, keepdim=True)
+        critic_Q1, critic_Q2 = self.critic(states, action_sampled)
 
-        actor_Q = torch.min(actor_Q1, actor_Q2)
-        actor_loss = (self.alpha.detach() * log_prob - actor_Q).mean()
+        critic_Q = torch.min(critic_Q1, critic_Q2)
+        actor_loss = -(critic_Q - self.alpha.detach() * log_prob).mean()
 
         # fork logic
         predict_next_state = self.sysmodel(states, actions)
@@ -137,7 +137,7 @@ class SAC_FORK(object):
         self.sysmodel_optimizer.step()
         self.sysmodel_loss = sysmodel_loss.item()
 
-        predict_reward = self.sysr(states,next_states,actions)
+        predict_reward = self.sysr(states, next_states, actions)
         sysr_loss = F.mse_loss(predict_reward, rewards.detach())
         self.sysr_optimizer.zero_grad()
         sysr_loss.backward()
@@ -148,23 +148,31 @@ class SAC_FORK(object):
         s_flag = 1 if sysmodel_loss.item() < self.sys_threshold else 0
 
         if s_flag == 1 and self.sys_weight != 0:
-            p_next_state = self.sysmodel(states, actions).clamp(self.obs_lower_bound, self.obs_upper_bound)
-            p_next_r = self.sysr(states, p_next_state.detach(), actions)
+            next_state_system = self.sysmodel(states, action_sampled).clamp(self.obs_lower_bound, self.obs_upper_bound)
+            r_sysr = self.sysr(states, next_state_system.detach(), action_sampled)
+            next_dist = self.actor(next_state_system.detach())
+            next_action = next_dist.rsample()
+            next_log_prob = next_dist.log_prob(next_action).sum(-1, keepdim=True)
 
-            dist2 = self.actor(p_next_state.detach())
-            action2 = dist2.rsample()
-            log_prob2 = dist2.log_prob(action2).sum(-1, keepdim=True)
-            p_next_state2 = self.sysmodel(p_next_state, action2).clamp(self.obs_lower_bound, self.obs_upper_bound)
-            p_next_r2 = self.sysr(p_next_state.detach(), p_next_state2.detach(), action2)
+            next2_state_system = self.sysmodel(next_state_system, next_action).clamp(self.obs_lower_bound, self.obs_upper_bound)
+            r_next_sysr = self.sysr(next_state_system.detach(), next2_state_system.detach(), next_action)
+            next2_dist = self.actor(next2_state_system.detach())
+            next2_action = next2_dist.rsample()
+            next2_log_prob = next2_dist.log_prob(next2_action).sum(-1, keepdim=True)
 
-            dist3 = self.actor(p_next_state2.detach())
-            action3 = dist3.rsample()
-            log_prob3 = dist3.log_prob(action3).sum(-1, keepdim=True)
+            '''
+            2-step rollout with the system model, then bootstrapping with the critic network:
+            - Steps 0→1: use system model (sysmodel + sysr)
+            - Steps 1→2: use system model (sysmodel + sysr)
+            - Steps 2+: bootstrap with critic network
 
-            qf3, qf4 = self.critic(p_next_state2.detach(), action3)
-            qf34 = torch.min(qf3, qf4)
+            Using the critic here provides a proper Q-value estimate for the continuation,
+            rather than relying on the system model indefinitely (which would accumulate errors).            
+            '''
+            critic_next2_Q1, critic_next2_Q2 = self.critic(next2_state_system.detach(), next2_action)
+            critic_next2_Q = torch.min(critic_next2_Q1, critic_next2_Q2)
 
-            sys_loss = -((p_next_r - self.alpha * log_prob) + self.gamma * (p_next_r2 - self.alpha * log_prob2) + self.gamma ** 2 * (qf34 - self.alpha * log_prob3)).mean()
+            sys_loss = -((r_sysr - self.alpha * log_prob) + self.gamma * (r_next_sysr - self.alpha * next_log_prob) + self.gamma ** 2 * (critic_next2_Q - self.alpha * next2_log_prob)).mean()
             actor_loss += self.sys_weight * sys_loss
 
         logger.log('train_actor/loss', actor_loss, step)
