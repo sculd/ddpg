@@ -172,6 +172,11 @@ class SAC_FORK(object):
             critic_next2_Q1, critic_next2_Q2 = self.critic(next2_state_system.detach(), next2_action)
             critic_next2_Q = torch.min(critic_next2_Q1, critic_next2_Q2)
 
+            '''
+            Question: The vanilla sac version's alpha * log_prob is paired with Q value, not reward. 
+            Q ~ reward + gamma * Q, where gamma ~0.99 thus Q is of much larger scale than reward (about 100 times). 
+            Yet, the sys_loss term has r_sysr - self.alpha * log_prob, pairing of r, not q.
+            '''
             sys_loss = -((r_sysr - self.alpha * log_prob) + self.gamma * (r_next_sysr - self.alpha * next_log_prob) + self.gamma ** 2 * (critic_next2_Q - self.alpha * next2_log_prob)).mean()
             actor_loss += self.sys_weight * sys_loss
 
