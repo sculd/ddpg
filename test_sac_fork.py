@@ -7,7 +7,7 @@ from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
 import sac.utils
 from sac_fork.agent import SAC_FORK
-from train_sac_fork import _checkpoint_file
+from train_sac_fork import _checkpoint_file_format
 
 
 class Workspace(object):
@@ -31,7 +31,7 @@ class Workspace(object):
         self.step = 0
 
     def evaluate(self):
-        self.agent.load(os.path.join(self.work_dir, _checkpoint_file))
+        self.agent.load(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
         average_episode_reward = 0
         for episode in range(self.cfg.num_eval_episodes):
             print(f"Evaluating episode {episode}")
@@ -62,7 +62,7 @@ def main(cfg):
     env = RecordVideo(
         env,
         video_folder="video/",
-        name_prefix="eval_fork",
+        name_prefix=f"eval_sacfork_{cfg.env}",
         episode_trigger=lambda x: True    # Record every episode
     )
 

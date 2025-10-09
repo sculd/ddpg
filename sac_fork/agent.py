@@ -236,6 +236,7 @@ class SAC_FORK(object):
 
         torch.save(self.sysr.state_dict(), filename + "_reward_model")
         torch.save(self.sysr_optimizer.state_dict(), filename + "_reward_model_optimizer")
+        print(f"Saved checkpoint to {filename}")
 
     def load(self, filename):
         self.critic.load_state_dict(torch.load(filename + "_critic"))

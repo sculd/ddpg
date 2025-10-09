@@ -11,7 +11,7 @@ from sac.logger import Logger
 from sac_fork.agent import SAC_FORK
 from sac_fork.replay_memory import ReplayMemory
 
-_checkpoint_file = 'checkpoints/sac_fork.pt'
+_checkpoint_file_format = 'checkpoints/sac_fork_{env}.pt'
 
 
 class Workspace(object):
@@ -73,12 +73,12 @@ class Workspace(object):
                 # evaluate agent periodically
                 if (episode + 1) % self.cfg.eval_frequency == 0:
                     if episode_reward > self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
 
                 self.logger.log('train/episode_reward', episode_reward, self.step)
 
                 if episode_reward > max_episode_reward:
-                    self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                    self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
                 max_episode_reward = max(max_episode_reward, episode_reward)
 
                 obs, _ = self.env.reset()
@@ -170,10 +170,10 @@ class Workspace(object):
 
                     if episode % self.cfg.eval_frequency == 0:
                         if episode_rewards[i] > self.cfg.target_score:
-                            self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                            self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
 
                     if episode_rewards[i] > max_episode_reward:
-                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file))
+                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
                     max_episode_reward = max(max_episode_reward, episode_rewards[i])
 
                     # Reset counters for completed environments

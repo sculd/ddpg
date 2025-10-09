@@ -87,10 +87,10 @@ class Workspace(object):
                 # evaluate agent periodically
                 if (episode + 1) % self.cfg.eval_frequency == 0:
                     if episode_reward > self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+                        self.agent.save(os.path.join(self.work_dir, f'checkpoints/sac_{self.cfg.env}.pt'))
 
                 if episode_reward > max_episode_reward:
-                    self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+                    self.agent.save(os.path.join(self.work_dir, f'checkpoints/sac_{self.cfg.env}.pt'))
                 max_episode_reward = max(max_episode_reward, episode_reward)
 
                 obs, _ = self.env.reset()
@@ -185,11 +185,11 @@ class Workspace(object):
 
                     if episode % self.cfg.eval_frequency == 0:
                         if episode_rewards[i] > self.cfg.target_score:
-                            self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+                            self.agent.save(os.path.join(self.work_dir, f'checkpoints/sac_{self.cfg.env}.pt'))
 
                     max_episode_reward = max(max_episode_reward, episode_rewards[i])
                     if episode_rewards[i] > max_episode_reward:
-                        self.agent.save(os.path.join(self.work_dir, 'checkpoints/sac.pt'))
+                        self.agent.save(os.path.join(self.work_dir, f'checkpoints/sac_{self.cfg.env}.pt'))
 
                     episode_rewards[i] = 0
                     episode_steps[i] = 0
