@@ -1,0 +1,18 @@
+defaults:
+  - agent: sac_pendulum
+  - _self_
+
+env: Pendulum-v1
+
+max_episode_steps: 400
+num_eval_episodes: 3
+
+device: cuda
+
+seed: 1
+
+hydra:
+  job:
+    name: ${env}
+  run:
+    dir: ./exp

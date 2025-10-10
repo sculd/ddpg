@@ -5,7 +5,7 @@ import hydra
 from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
 import sac.utils
-from train_sac_fork import _checkpoint_file_format
+from train_sac import _checkpoint_file_format
 
 
 class Workspace(object):

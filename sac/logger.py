@@ -22,17 +22,7 @@ COMMON_EVAL_FORMAT = [
     ('episode_reward', 'R', 'float') 
 ]
 
-
-AGENT_TRAIN_FORMAT = {
-    'sac': [
-        ('batch_reward', 'BR', 'float'),
-        ('actor_loss', 'ALOSS', 'float'),
-        ('critic_loss', 'CLOSS', 'float'),
-        ('alpha_loss', 'TLOSS', 'float'),
-        ('alpha_value', 'TVAL', 'float'),
-        ('actor_entropy', 'AENT', 'float')
-    ],
-    'sac_fork': [
+_BASIC_TRAIN_FORMAT = [
         ('batch_reward', 'BR', 'float'),
         ('actor_loss', 'ALOSS', 'float'),
         ('critic_loss', 'CLOSS', 'float'),
@@ -40,6 +30,10 @@ AGENT_TRAIN_FORMAT = {
         ('alpha_value', 'TVAL', 'float'),
         ('actor_entropy', 'AENT', 'float')
     ]
+
+AGENT_TRAIN_FORMAT = {
+    'sac': _BASIC_TRAIN_FORMAT,
+    'sac_fork': _BASIC_TRAIN_FORMAT,
 }
 
 
@@ -63,6 +57,9 @@ class MetersGroup(object):
         self._meters = defaultdict(AverageMeter)
         self._csv_file = open(self._csv_file_name, 'w')
         self._csv_writer = None
+        # Pre-populate the expected CSV schema so late-arriving metrics still fit.
+        self._fieldnames = {key for key, _, _ in self._formating}
+        self._fieldnames.add('step')
 
     def _prepare_file(self, prefix, suffix):
         file_name = f'{prefix}.{suffix}'
@@ -86,8 +83,9 @@ class MetersGroup(object):
 
     def _dump_to_csv(self, data):
         if self._csv_writer is None:
+            fieldnames = sorted(self._fieldnames.union(data.keys()))
             self._csv_writer = csv.DictWriter(self._csv_file,
-                                              fieldnames=sorted(data.keys()),
+                                              fieldnames=fieldnames,
                                               restval=0.0)
             self._csv_writer.writeheader()
         self._csv_writer.writerow(data)
