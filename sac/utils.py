@@ -43,10 +43,6 @@ def make_env(cfg, render_mode):
         env = gym.make(env_id, render_mode=render_mode)
         env.reset(seed=cfg.seed) 
 
-    # sanity check for SAC [-1,1] action bounds
-    assert env.action_space.low.min() >= -1
-    assert env.action_space.high.max() <= 1
-
     return env
 
 

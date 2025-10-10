@@ -31,7 +31,13 @@ class Workspace(object):
         self.step = 0
 
     def evaluate(self):
-        self.agent.load(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
+        checkpoint_file = _checkpoint_file_format.format(env=self.cfg.env)
+        if not os.path.exists(checkpoint_file):
+            print(f"Checkpoint file {checkpoint_file} not found")
+        else:
+            print(f"Loading checkpoint from {checkpoint_file}")
+            self.agent.load(checkpoint_file)
+
         average_episode_reward = 0
         for episode in range(self.cfg.num_eval_episodes):
             print(f"Evaluating episode {episode}")

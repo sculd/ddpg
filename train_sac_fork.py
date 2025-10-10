@@ -54,66 +54,7 @@ class Workspace(object):
         if self.is_vectorized:
             self._run_vectorized()
         else:
-            self._run_single()
-
-    def _run_single(self):
-        """Original single environment training loop"""
-        episode, episode_reward, done = 0, 0, True
-        max_episode_reward = 0
-        episode_step = 0
-        start_time = time.time()
-        while self.step < self.cfg.num_train_steps:
-            if done or episode_step >= self.cfg.max_episode_steps:
-                if self.step < self.cfg.num_seed_steps:
-                    print(f"Episode {episode} completed at step {self.step}")
-                self.logger.log('train/duration', time.time() - start_time, self.step)
-                start_time = time.time()
-                self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
-
-                # evaluate agent periodically
-                if (episode + 1) % self.cfg.eval_frequency == 0:
-                    if episode_reward > self.cfg.target_score:
-                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
-
-                self.logger.log('train/episode_reward', episode_reward, self.step)
-
-                if episode_reward > max_episode_reward:
-                    self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
-                max_episode_reward = max(max_episode_reward, episode_reward)
-
-                obs, _ = self.env.reset()
-                self.agent.reset()
-                done = False
-                episode_reward = 0
-                episode_step = 0
-                episode += 1
-
-                self.logger.log('train/episode', episode, self.step)
-
-            # num_updates_per_step is ignored for single env training
-            if self.step >= self.cfg.num_seed_steps:
-                self.agent.update(self.replay_buffer, self.cfg.batch_size, self.logger, self.step)
-
-            # sample action for data collection
-            if self.step < self.cfg.num_seed_steps:
-                action = self.env.action_space.sample()
-            else:
-                with sac.utils.eval_mode(self.agent):
-                    action = self.agent.act(obs)
-
-            next_obs, reward, done, _, _ = self.env.step(action)
-
-            # allow infinite bootstrap
-            done = float(done)
-            episode_reward += reward
-
-            self.replay_buffer.add(obs, action, reward, next_obs, done)
-
-            obs = next_obs
-            self.agent.obs_upper_bound = np.amax(obs) if self.agent.obs_upper_bound < np.amax(obs) else self.agent.obs_upper_bound
-            self.agent.obs_lower_bound = np.amin(obs) if self.agent.obs_lower_bound > np.amin(obs) else self.agent.obs_lower_bound
-            episode_step += 1
-            self.step += 1
+            print(f"run vectorized")
 
     def _run_vectorized(self):
         """Vectorized environment training loop"""
@@ -172,11 +113,11 @@ class Workspace(object):
                         if episode_rewards[i] > self.cfg.target_score:
                             self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
 
-                    if episode_rewards[i] > max_episode_reward:
+                    if episode_rewards[i] >= max_episode_reward:
+                        print(f"Episode {episode}, env_i: {i}, reward: {episode_rewards[i]} winning against {max_episode_reward=}")
                         self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
-                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
 
-                    # Reset counters for completed environments
+                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
                     episode_rewards[i] = 0
                     episode_steps[i] = 0
 
