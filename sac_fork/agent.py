@@ -224,30 +224,46 @@ class SAC_FORK(object):
 
 
     # Save model parameters
-    def save(self, filename):
-        torch.save(self.critic.state_dict(), filename + "_critic")
-        torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
+    def save(self, filepath):
+        import os
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
-        torch.save(self.actor.state_dict(), filename + "_actor")
-        torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
+        checkpoint = {
+            'critic_state_dict': self.critic.state_dict(),
+            'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+            'critic_target_state_dict': self.critic_target.state_dict(),
+            'actor_state_dict': self.actor.state_dict(),
+            'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
+            'sysmodel_state_dict': self.sysmodel.state_dict(),
+            'sysmodel_optimizer_state_dict': self.sysmodel_optimizer.state_dict(),
+            'sysr_state_dict': self.sysr.state_dict(),
+            'sysr_optimizer_state_dict': self.sysr_optimizer.state_dict(),
+            'log_alpha': self.log_alpha.data,
+            'obs_upper_bound': self.obs_upper_bound,
+            'obs_lower_bound': self.obs_lower_bound,
+        }
 
-        torch.save(self.sysmodel.state_dict(), filename + "_sysmodel")
-        torch.save(self.sysmodel_optimizer.state_dict(), filename + "_sysmodel_optimizer")
+        torch.save(checkpoint, filepath)
+        print(f"Saved checkpoint to {filepath}")
 
-        torch.save(self.sysr.state_dict(), filename + "_reward_model")
-        torch.save(self.sysr_optimizer.state_dict(), filename + "_reward_model_optimizer")
-        print(f"Saved checkpoint to {filename}")
+    def load(self, filepath):
+        import os
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
 
-    def load(self, filename):
-        self.critic.load_state_dict(torch.load(filename + "_critic"))
-        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
-        self.critic_target = copy.deepcopy(self.critic)
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
 
-        self.actor.load_state_dict(torch.load(filename + "_actor"))
-        self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.critic.load_state_dict(checkpoint['critic_state_dict'])
+        self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+        self.critic_target.load_state_dict(checkpoint['critic_target_state_dict'])
+        self.actor.load_state_dict(checkpoint['actor_state_dict'])
+        self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
+        self.sysmodel.load_state_dict(checkpoint['sysmodel_state_dict'])
+        self.sysmodel_optimizer.load_state_dict(checkpoint['sysmodel_optimizer_state_dict'])
+        self.sysr.load_state_dict(checkpoint['sysr_state_dict'])
+        self.sysr_optimizer.load_state_dict(checkpoint['sysr_optimizer_state_dict'])
+        self.log_alpha.data = checkpoint['log_alpha']
+        self.obs_upper_bound = checkpoint.get('obs_upper_bound', 10)
+        self.obs_lower_bound = checkpoint.get('obs_lower_bound', -10)
 
-        self.sysmodel.load_state_dict(torch.load(filename + "_sysmodel"))
-        self.sysmodel_optimizer.load_state_dict(torch.load(filename + "_sysmodel_optimizer"))
-
-        self.sysr.load_state_dict(torch.load(filename + "_reward_model"))
-        self.sysr_optimizer.load_state_dict(torch.load(filename + "_reward_model_optimizer"))
+        print(f"Loaded checkpoint from {filepath}")
