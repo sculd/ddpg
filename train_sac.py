@@ -74,7 +74,7 @@ class Workspace(object):
         episode = 0
         episode_rewards = np.zeros(self.num_envs)
         episode_steps = np.zeros(self.num_envs, dtype=int)
-        max_episode_reward = -10**4
+        max_episode_reward = -float('inf')
         start_time = time.time()
         num_updates_per_step = getattr(self.cfg, 'num_updates_per_step', 1)
 
