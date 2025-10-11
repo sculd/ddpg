@@ -1,0 +1,19 @@
+name: sac_fork
+_target_: sac_fork.agent.SAC_FORK
+obs_dim: ??? # to be specified later
+action_dim: ??? # to be specified later
+action_range: ??? # to be specified later
+device: ${device}
+args:
+  gamma: 0.99
+  tau: 0.005
+  alpha: 2.0
+  policy_type: "Gaussian"
+  target_update_interval: 2
+  automatic_entropy_tuning: false
+  lr: 1e-4
+  hidden_size: 256
+  sys_hidden_size: 256
+  sys_weight: 0.5
+  sys_threshold: 0.020
+  sysr_hidden_size: 256

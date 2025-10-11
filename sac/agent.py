@@ -129,7 +129,7 @@ class SACAgent(Agent):
         actor_Q1, actor_Q2 = self.critic(obs, action)
 
         actor_Q = torch.min(actor_Q1, actor_Q2)
-        actor_loss = (self.alpha.detach() * log_prob - actor_Q).mean()
+        actor_loss = -(actor_Q - self.alpha.detach() * log_prob).mean()
 
         logger.log('train_actor/loss', actor_loss, step)
         logger.log('train_actor/target_entropy', self.target_entropy, step)
@@ -147,10 +147,10 @@ class SACAgent(Agent):
             self.log_alpha_optimizer.zero_grad()
             alpha_loss = (self.alpha * (-log_prob - self.target_entropy).detach()).mean()
             logger.log('train_alpha/loss', alpha_loss, step)
-            logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
             torch.nn.utils.clip_grad_norm_([self.log_alpha], max_norm=1.0)
             self.log_alpha_optimizer.step()
+        logger.log('train_alpha/value', self.alpha, step)
 
     def update(self, replay_buffer, logger, step):
         obs, action, reward, next_obs, not_done = replay_buffer.sample(self.batch_size)

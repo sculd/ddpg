@@ -1,5 +1,5 @@
 defaults:
-  - agent: sac_mountain_car
+  - agent: sac_fork_mountain_car
   - _self_
 
 env: MountainCarContinuous-v0
@@ -17,23 +17,19 @@ num_envs: 12
 num_updates_per_step: 4
 
 num_train_steps: 5e5
-max_episode_steps: 1000
-replay_buffer_capacity: ${num_train_steps}
-
+max_episode_steps: 2000
 num_seed_steps: 5000
+replay_buffer_capacity: ${num_train_steps}
+batch_size: 1024
 
-eval_frequency: 3
+eval_frequency: 100
 num_eval_episodes: 3
-target_score: 90
+target_score: 290
 
 device: cuda
 
 log_frequency: 10000
 log_save_tb: true
-
-# Profiling options (enable independently)
-profile_cprofile: false  # Python-level profiling (low overhead, good for hotspot analysis)
-profile_torch: false     # PyTorch operator profiling (higher overhead, GPU/CPU details)
 
 seed: 1
 
@@ -42,3 +38,4 @@ hydra:
     name: ${env}
   run:
     dir: ./exp
+

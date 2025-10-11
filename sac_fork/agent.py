@@ -46,10 +46,10 @@ class SAC_FORK(object):
         self.sysmodel_loss = 0
         self.sysr_loss = 0
 
+        # set target entropy to -|A|
+        self.target_entropy = -action_dim
         # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
         if self.automatic_entropy_tuning is True:
-            # set target entropy to -|A|
-            self.target_entropy = -action_dim
             self.log_alpha_optim = torch.optim.Adam([self.log_alpha], lr=args.lr)
 
         self.actor = DiagGaussianActor(obs_dim, action_dim, args.hidden_size, hidden_depth=3).to(self.device)
@@ -199,10 +199,10 @@ class SAC_FORK(object):
             self.log_alpha_optim.zero_grad()
             alpha_loss = (self.alpha * (-log_prob - self.target_entropy).detach()).mean()
             logger.log('train_alpha/loss', alpha_loss, step)
-            logger.log('train_alpha/value', self.alpha, step)
             alpha_loss.backward()
             torch.nn.utils.clip_grad_norm_([self.log_alpha], max_norm=1.0)
             self.log_alpha_optim.step()
+        logger.log('train_alpha/value', self.alpha, step)
 
         if step % self.target_update_interval == 0:
             soft_update(self.critic_target, self.critic, self.tau)
