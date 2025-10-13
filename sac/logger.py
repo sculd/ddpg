@@ -127,17 +127,15 @@ class Logger(object):
                  save_tb=False,
                  log_frequency=10000,
                  agent='sac'):
-        self._log_dir = log_dir
         self._log_frequency = log_frequency
+        if os.path.exists(log_dir):
+            try:
+                shutil.rmtree(log_dir)
+            except:
+                print("logger.py warning: Unable to remove log directory")
+                pass
         if save_tb:
-            tb_dir = os.path.join(log_dir, 'tb')
-            if os.path.exists(tb_dir):
-                try:
-                    shutil.rmtree(tb_dir)
-                except:
-                    print("logger.py warning: Unable to remove tb directory")
-                    pass
-            self._sw = SummaryWriter(tb_dir)
+            self._sw = SummaryWriter(log_dir)
         else:
             self._sw = None
         # each agent has specific output format for training

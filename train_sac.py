@@ -30,7 +30,8 @@ def maybe_record_function(name, enabled=True):
 class Workspace(object):
     def __init__(self, env, cfg, torch_profiler=None):
         self.work_dir = os.getcwd()
-        print(f'workspace: {self.work_dir}')
+        log_dir = os.path.join(self.work_dir, f'tb_sac_{cfg.env}')
+        print(f'workspace: {self.work_dir}, log_dir: {log_dir}')
 
         self.env = env
         self.cfg = cfg
@@ -39,7 +40,7 @@ class Workspace(object):
         self.torch_profiler = torch_profiler
         self.profiling_enabled = torch_profiler is not None
 
-        self.logger = Logger(self.work_dir,
+        self.logger = Logger(log_dir,
                              save_tb=cfg.log_save_tb,
                              log_frequency=cfg.log_frequency,
                              agent=cfg.agent.name)

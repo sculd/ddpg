@@ -17,14 +17,15 @@ _checkpoint_file_format = 'checkpoints/sac_fork_{env}.pt'
 class Workspace(object):
     def __init__(self, env, cfg):
         self.work_dir = os.getcwd()
-        print(f'workspace: {self.work_dir}')
+        log_dir = os.path.join(self.work_dir, f'tb_sac_{cfg.env}')
+        print(f'workspace: {self.work_dir}, log_dir: {log_dir}')
 
         self.env = env
         self.cfg = cfg
         self.num_envs = getattr(cfg, 'num_envs', 1)
         self.is_vectorized = self.num_envs > 1
 
-        self.logger = Logger(self.work_dir,
+        self.logger = Logger(log_dir,
                              save_tb=cfg.log_save_tb,
                              log_frequency=cfg.log_frequency,
                              agent=cfg.agent.name)
@@ -130,7 +131,7 @@ class Workspace(object):
                 start_time = time.time()
                 self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
 
-@hydra.main(version_base=None, config_path="configs_sac_fork", config_name="train.yaml")
+@hydra.main(version_base=None, config_path="configs_sac_fork", config_name="train_mountain_car.yaml")
 def main(cfg):
     env, cfg = sac.utils.env_with_cfg(cfg)
     workspace = Workspace(env, cfg)
