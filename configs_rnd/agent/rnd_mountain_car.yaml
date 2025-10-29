@@ -1,0 +1,26 @@
+qnet:
+  _target_: rnd.network.QNet
+  in_dim: ${agent.obs_dim}
+  n_hid: 64
+  out_dim: 3  # 3 discrete actions for mountain car: left, none, right
+
+rnd:
+  _target_: rnd.network.RND
+  in_dim: ${agent.obs_dim}
+  n_hid: 128
+  out_dim: 64
+
+name: rnd
+_target_: rnd.agent.DQNRNDAgent
+obs_dim: ??? # to be specified later
+action_dim: ??? # to be specified later
+action_range: ??? # to be specified later
+qnet_cfg: ${agent.qnet}
+rnd_cfg: ${agent.rnd}
+gamma: 0.95
+batch_size: 64
+epsilon: 0.1
+epsi_high: 0.9
+epsi_low: 0.05
+
+

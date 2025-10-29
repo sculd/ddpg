@@ -1,0 +1,44 @@
+defaults:
+  - agent: rnd_mountain_car
+  - _self_
+
+env: MountainCarContinuous-v0
+
+experiment: test_exp
+
+# Number of parallel environments (set to 1 for single env, 8+ for speedup)
+num_envs: 1
+
+# Number of gradient updates per training step. ignored for single env training.
+# Examples with num_envs=10:
+#   num_updates_per_step: 10 -> 10 samples collected, 10 updates (1:1 ratio)
+#   num_updates_per_step: 5  -> 10 samples collected, 5 updates (2:1 ratio)
+#   num_updates_per_step: 1  -> 10 samples collected, 1 update (10:1 ratio)
+num_updates_per_step: 1
+
+num_train_steps: 5e5
+max_episode_steps: 1000
+replay_buffer_capacity: ${num_train_steps}
+
+num_seed_steps: 5000
+
+eval_frequency: 3
+num_eval_episodes: 3
+target_score: 90
+
+device: cpu
+
+log_frequency: 10000
+log_save_tb: true
+
+# Profiling options (enable independently)
+profile_cprofile: false  # Python-level profiling (low overhead, good for hotspot analysis)
+profile_torch: false     # PyTorch operator profiling (higher overhead, GPU/CPU details)
+
+seed: 1
+
+hydra:
+  job:
+    name: ${env}
+  run:
+    dir: ./exp
