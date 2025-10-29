@@ -1,13 +1,12 @@
 # Reinforcement Learning On Bipedal Walker
 
-DDPG = Deep Deterministic Policy Gradient
-SAC = Soft Actor Critic
-FORK = Foward Looking
 
-
-* DDPG: https://arxiv.org/abs/1509.02971
-* SAC: https://arxiv.org/abs/1801.01290
-* FORK: https://arxiv.org/abs/2010.01652
+* DDPG: Deep Deterministic Policy Gradient 
+  * https://arxiv.org/abs/1509.02971
+* SAC: Soft Actor Critic
+  * https://arxiv.org/abs/1801.01290
+* FORK: Foward Looking
+  * https://arxiv.org/abs/2010.01652
 
 Env: `BipedalWalker-v3`, and its `BipedalWalkerHardcore-v3` variant (much harder).
 
@@ -36,6 +35,17 @@ SAC-FORK augments SAC by adding forward looking term. This allwos it to achieve 
 ## Batchsize
 Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/abs/1509.02971), suggests a smaller batch size of 16, but my observation does not align with it.
 
+## Mountain Car
+Mountain Car is hard because the agent must perform a long sequence of seemingly counterproductive actions—moving away from the goal to build enough momentum—before receiving the sparse reward at the top of the hill.
+
+<img src="images/animation_sac_mountain_car_fail.gif" width="50%" height="50%">
+
+(See how the agent laerns to minimizes the car movement to avoid penalty just from moving).
+
+* RND: Random Network Distillation
+  * https://arxiv.org/abs/1810.12894
+
+Exploratory algorithms like SAC and RND fail to solve the Mountain Car problem because they rewards novel states rather than goal-directed progress. In other words, they drive curiosity but not purposeful momentum accumulation.
 
 ## Environments
 
@@ -47,3 +57,4 @@ Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/a
 $ snakeviz profiles/training_profile.prof
 $ tensorboard --logdir=./profiles/torch_profilerer
 ```
+
