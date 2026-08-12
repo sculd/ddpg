@@ -75,6 +75,13 @@ Mountain Car is hard because the agent must perform a long sequence of seemingly
 
 Exploratory algorithms like SAC and RND fail to solve the Mountain Car problem because they rewards novel states rather than goal-directed progress. In other words, they drive curiosity but not purposeful momentum accumulation.
 
+#### SAC-CN (solved)
+SAC with pink-noise exploration (see the MountainCarContinuous section above) solves it:
+the temporally correlated noise produces the coherent rocking that builds momentum. The
+trained agent reaches the flag in ~70 steps, scoring ~95 per episode.
+
+<img src="images/animation_sac_cn_mountain_car.gif" width="50%" height="50%">
+
 ## Environments
 
 * Pytorch >= 2.5.1
