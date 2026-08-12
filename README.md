@@ -68,7 +68,7 @@ Mountain Car is hard because the agent must perform a long sequence of seemingly
 
 <img src="images/animation_sac_mountain_car_fail.gif" width="50%" height="50%">
 
-(See how the agent laerns to minimizes the car movement to avoid penalty just from moving).
+(See how the agent learns to minimize the car movement to avoid the penalty that comes just from moving).
 
 * RND: Random Network Distillation
   * https://arxiv.org/abs/1810.12894
