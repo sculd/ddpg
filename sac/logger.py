@@ -33,6 +33,7 @@ _BASIC_TRAIN_FORMAT = [
 
 AGENT_TRAIN_FORMAT = {
     'sac': _BASIC_TRAIN_FORMAT,
+    'sac_cn': _BASIC_TRAIN_FORMAT,
     'sac_fork': _BASIC_TRAIN_FORMAT,
 }
 

@@ -11,9 +11,11 @@ from torch import distributions as pyd
 from torch import nn
 
 
-def make_env(cfg, render_mode):
+def make_env(cfg, render_mode, seed=None):
     """Helper function to create dm_control environment (using gym-dmc)"""
     env_id = cfg.env
+    if seed is None:
+        seed = cfg.seed
 
     # DeepMind Control Suite case
     if "_" in env_id and not env_id.endswith("-v3"):
@@ -33,28 +35,32 @@ def make_env(cfg, render_mode):
         env = dmc2gym.make(
             domain_name=domain_name,
             task_name=task_name,
-            seed=cfg.seed,
+            seed=seed,
             visualize_reward=True,
         )
-        env.seed(cfg.seed)
+        env.seed(seed)
 
     # Gymnasium environments (e.g. BipedalWalker-v3)
     else:
-        env = gym.make(env_id, render_mode=render_mode)
-        env.reset(seed=cfg.seed) 
+        max_episode_steps = getattr(cfg, 'max_episode_steps', None)
+        env = gym.make(env_id, render_mode=render_mode,
+                       max_episode_steps=int(max_episode_steps) if max_episode_steps else None)
+        env.reset(seed=seed)
 
     return env
 
 
-def env_with_cfg(cfg, render_mode=None):
+def env_with_cfg(cfg, render_mode=None, vectorize=None):
     # Check if we should use vectorized environments
     num_envs = getattr(cfg, 'num_envs', 1)
+    if vectorize is None:
+        vectorize = num_envs > 1
 
-    if num_envs > 1:
-        # Create vectorized environment
+    if vectorize:
+        # Create vectorized environment; distinct seed per sub-env for diverse starts
         env = gym.vector.AsyncVectorEnv([
-            lambda: make_env(cfg, render_mode=render_mode)
-            for _ in range(num_envs)
+            (lambda i=i: make_env(cfg, render_mode=render_mode, seed=cfg.seed + i))
+            for i in range(num_envs)
         ])
         cfg.agent.obs_dim = env.single_observation_space.shape[0]
         cfg.agent.action_dim = env.single_action_space.shape[0]

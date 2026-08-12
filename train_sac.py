@@ -6,6 +6,7 @@ import time
 from contextlib import contextmanager
 
 import hydra
+import imageio
 import numpy as np
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
@@ -14,7 +15,8 @@ import sac.utils
 from sac.logger import Logger
 from sac.replay_buffer import ReplayBuffer
 
-_checkpoint_file_format = 'checkpoints/sac_{env}.pt'
+_checkpoint_file_format = 'checkpoints/{agent}_{env}.pt'
+_checkpoint_latest_file_format = 'checkpoints/{agent}_{env}_latest.pt'
 
 
 @contextmanager
@@ -36,7 +38,6 @@ class Workspace(object):
         self.env = env
         self.cfg = cfg
         self.num_envs = getattr(cfg, 'num_envs', 1)
-        self.is_vectorized = self.num_envs > 1
         self.torch_profiler = torch_profiler
         self.profiling_enabled = torch_profiler is not None
 
@@ -49,28 +50,47 @@ class Workspace(object):
         self.device = torch.device(cfg.device)
         self.agent = hydra.utils.instantiate(cfg.agent, _recursive_=False)
 
-        # Get observation and action space shapes
-        if self.is_vectorized:
-            obs_shape = self.env.single_observation_space.shape
-            action_shape = self.env.single_action_space.shape
-        else:
-            obs_shape = self.env.observation_space.shape
-            action_shape = self.env.action_space.shape
+        # Training always runs on a (possibly single-env) vector env
+        obs_shape = self.env.single_observation_space.shape
+        action_shape = self.env.single_action_space.shape
 
         self.replay_buffer = ReplayBuffer(obs_shape,
                                           action_shape,
                                           int(cfg.replay_buffer_capacity),
                                           self.device)
 
+        # Periodic rendering of a deterministic episode during training
+        self.render_frequency = cfg.get('render_frequency', 0)
+        if self.render_frequency:
+            self.render_env = sac.utils.make_env(cfg, render_mode="rgb_array",
+                                                 seed=cfg.seed + 10000)
+            self.video_dir = os.path.join(self.work_dir, 'video', 'train')
+            os.makedirs(self.video_dir, exist_ok=True)
+
         self.step = 0
 
-    def run(self):
-        if self.is_vectorized:
-            self._run_vectorized()
-        else:
-            print(f"run vectorized")
+    def render_episode(self, episode):
+        """Roll out one deterministic episode with the current policy and save it as mp4."""
+        obs, _ = self.render_env.reset()
+        frames = [self.render_env.render()]
+        episode_reward = 0.0
+        done = False
+        while not done:
+            with sac.utils.eval_mode(self.agent):
+                action = self.agent.act(obs, sample=False)
+            obs, reward, terminated, truncated, _ = self.render_env.step(action)
+            frames.append(self.render_env.render())
+            episode_reward += reward
+            done = terminated or truncated
 
-    def _run_vectorized(self):
+        fps = self.render_env.metadata.get('render_fps', 30)
+        path = os.path.join(
+            self.video_dir,
+            f'{self.cfg.agent.name}_{self.cfg.env}_ep{episode:05d}_step{self.step}_r{episode_reward:.0f}.mp4')
+        imageio.mimsave(path, frames, fps=fps)
+        print(f'Saved training video ({episode_reward=:.2f}) to {path}')
+
+    def run(self):
         """Vectorized environment training loop"""
         episode = 0
         episode_rewards = np.zeros(self.num_envs)
@@ -78,10 +98,17 @@ class Workspace(object):
         max_episode_reward = -float('inf')
         start_time = time.time()
         num_updates_per_step = getattr(self.cfg, 'num_updates_per_step', 1)
+        checkpoint_file = os.path.join(
+            self.work_dir, _checkpoint_file_format.format(agent=self.cfg.agent.name, env=self.cfg.env))
+        checkpoint_latest_file = os.path.join(
+            self.work_dir, _checkpoint_latest_file_format.format(agent=self.cfg.agent.name, env=self.cfg.env))
 
         # Initialize all environments
         obs, _ = self.env.reset()
         self.agent.reset()
+        # gymnasium NEXT_STEP autoreset: envs flagged here reset on the upcoming
+        # step() call, whose returned transition is bookkeeping, not a real step
+        autoreset = np.zeros(self.num_envs, dtype=bool)
 
         while self.step < self.cfg.num_train_steps:
             # run training updates (multiple updates per step as num_envs samples are collected per step)
@@ -101,37 +128,49 @@ class Workspace(object):
 
             # Step all environments
             with maybe_record_function("env_step", self.profiling_enabled):
-                next_obs, rewards, dones, _, _ = self.env.step(action)
-            # Check for episode termination (including max steps)
-            terminated = dones | (episode_steps >= self.cfg.max_episode_steps)
+                next_obs, rewards, terminations, truncations, _ = self.env.step(action)
+            dones = terminations | truncations
+
+            # store only real transitions; bootstrap through truncations (done = terminated only)
+            store = ~autoreset
             with maybe_record_function("replay_buffer_add", self.profiling_enabled):
-                self.replay_buffer.add(obs, action, rewards, next_obs, terminated.astype(np.float32))
+                if store.any():
+                    self.replay_buffer.add(obs[store], action[store], rewards[store],
+                                           next_obs[store], terminations[store].astype(np.float32))
 
             # Update episode stats
-            episode_rewards += rewards
-            episode_steps += 1
+            episode_rewards[store] += rewards[store]
+            episode_steps[store] += 1
 
-            if np.any(terminated):
-                for i in np.where(terminated)[0]:
-                    if self.step < self.cfg.num_seed_steps:
-                        print(f"Episode {episode} (env {i}) completed at step {self.step}, reward: {episode_rewards[i]:.2f}")
+            for i in np.where(dones & store)[0]:
+                if self.step < self.cfg.num_seed_steps:
+                    print(f"Episode {episode} (env {i}) completed at step {self.step}, reward: {episode_rewards[i]:.2f}")
 
-                    episode += 1
-                    self.logger.log('train/episode_reward', episode_rewards[i], self.step)
-                    self.logger.log('train/episode', episode, self.step)
+                episode += 1
+                self.logger.log('train/episode_reward', episode_rewards[i], self.step)
+                self.logger.log('train/episode', episode, self.step)
 
-                    if episode % self.cfg.eval_frequency == 0:
-                        if episode_rewards[i] > self.cfg.target_score:
-                            self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
+                if episode % self.cfg.eval_frequency == 0:
+                    if episode_rewards[i] > self.cfg.target_score:
+                        self.agent.save(checkpoint_file)
 
-                    if episode_rewards[i] >= max_episode_reward:
-                        print(f"Episode {episode}, env_i: {i}, reward: {episode_rewards[i]} winning against {max_episode_reward=}")
-                        self.agent.save(os.path.join(self.work_dir, _checkpoint_file_format.format(env=self.cfg.env)))
+                if episode_rewards[i] >= max_episode_reward:
+                    print(f"Episode {episode}, env_i: {i}, reward: {episode_rewards[i]} winning against {max_episode_reward=}")
+                    self.agent.save(checkpoint_file)
 
-                    max_episode_reward = max(max_episode_reward, episode_rewards[i])
-                    episode_rewards[i] = 0
-                    episode_steps[i] = 0
+                max_episode_reward = max(max_episode_reward, episode_rewards[i])
+                episode_rewards[i] = 0
+                episode_steps[i] = 0
 
+                # give exploration-noise processes a fresh sequence for the new episode
+                if hasattr(self.agent, 'reset_noise'):
+                    self.agent.reset_noise(i)
+
+                if self.render_frequency and episode % self.render_frequency == 0 \
+                        and self.step >= self.cfg.num_seed_steps:
+                    self.render_episode(episode)
+
+            autoreset = dones
             obs = next_obs
             self.step += self.num_envs
 
@@ -141,13 +180,15 @@ class Workspace(object):
                     self.logger.log('train/duration', time.time() - start_time, self.step)
                     start_time = time.time()
                     self.logger.dump(self.step, save=(self.step > self.cfg.num_seed_steps))
+                    if self.step > self.cfg.num_seed_steps:
+                        self.agent.save(checkpoint_latest_file)
 
             # PyTorch profiler step
             if self.torch_profiler is not None:
                 self.torch_profiler.step()
 
 def main_with_cfg(cfg):
-    env, cfg = sac.utils.env_with_cfg(cfg)
+    env, cfg = sac.utils.env_with_cfg(cfg, vectorize=True)
 
     # Check which profilers are enabled
     enable_cprofile = cfg.get('profile_cprofile', False)

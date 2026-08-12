@@ -22,7 +22,7 @@ class Workspace(object):
         self.step = 0
 
     def evaluate(self):
-        checkpoint_file = _checkpoint_file_format.format(env=self.cfg.env)
+        checkpoint_file = _checkpoint_file_format.format(agent=self.cfg.agent.name, env=self.cfg.env)
         if not os.path.exists(checkpoint_file):
             print(f"Checkpoint file {checkpoint_file} not found")
         else:
@@ -39,8 +39,9 @@ class Workspace(object):
             episode_step = 0
             while not done:
                 with sac.utils.eval_mode(self.agent):
-                    action = self.agent.act(obs, sample=True)
-                obs, reward, done, _, _ = self.env.step(action)
+                    action = self.agent.act(obs, sample=False)
+                obs, reward, terminated, truncated, _ = self.env.step(action)
+                done = terminated or truncated
                 episode_reward += reward
                 episode_step += 1
                 if episode_step >= self.cfg.max_episode_steps:

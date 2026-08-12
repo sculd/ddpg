@@ -60,7 +60,7 @@ class Workspace(object):
         average_episode_reward /= self.cfg.num_eval_episodes
         print(f"Average episode reward: {average_episode_reward}")
 
-@hydra.main(version_base=None, config_path="configs_sac_fork", config_name="test.yaml")
+@hydra.main(version_base=None, config_path="configs_sac_fork", config_name="test_mountain_car.yaml")
 def main(cfg):
     env, cfg = sac.utils.env_with_cfg(cfg, render_mode="rgb_array")
 

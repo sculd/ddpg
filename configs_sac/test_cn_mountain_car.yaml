@@ -1,0 +1,19 @@
+defaults:
+  - agent: sac_cn_mountain_car
+  - _self_
+
+env: MountainCarContinuous-v0
+
+num_envs: 1
+max_episode_steps: 1000
+num_eval_episodes: 3
+
+device: cuda
+
+seed: 1
+
+hydra:
+  job:
+    name: ${env}
+  run:
+    dir: ./exp
