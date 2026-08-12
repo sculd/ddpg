@@ -4,6 +4,7 @@ __pycache__/
 
 # run artifacts
 checkpoints/
+snapshot/
 exp/
 profiles/
 tb/
