@@ -32,6 +32,7 @@ class AgentHer(Agent):
                  num_envs=1,
                  noise_seed=None,
                  toggle_sigma_decay=True,
+                 action_l2=0.0,
                  ):
         super(AgentHer, self).__init__(
             n_inputs+3, # state + goal
@@ -45,13 +46,14 @@ class AgentHer(Agent):
             layer1_size=layer1_size, 
             layer2_size=layer2_size, 
             batch_size=batch_size,
-            noise_sigma=noise_sigma,
+            noise_sigma_initial=noise_sigma,
             noise_sigma_final=noise_sigma_final,
             num_envs=num_envs,
             noise_seed=noise_seed,
+            action_l2=action_l2,
         )
         self.env = env
-        self.memory_her = ReplayBuffer(replay_buffer_size)
+        self.toggle_sigma_decay = toggle_sigma_decay
         self.reset_episode_goals()
 
     def reset_episode_goals(self):
@@ -59,7 +61,7 @@ class AgentHer(Agent):
         self.achieved_goals = []
 
     def choose_action(self, state, goal, with_noise=True):
-        input = torch.concat((torch.from_numpy(state), torch.from_numpy(goal)), dim=0)
+        input = np.concatenate((state, goal)).astype(np.float32)
         return super().choose_action(input, with_noise=with_noise)
 
     def learn_online(self):
@@ -96,7 +98,7 @@ class AgentHer(Agent):
 
     def add_her_batch_to_memory(self):
         # HER: Use achieved goals as additional goals
-        memory_her = ReplayBuffer(len(self.episode))
+        memory_her = ReplayBuffer(self.memory.env_name, len(self.episode) * N_HER_GOALS)
         her_rewards = []
         for i, (state, achieved_goal, desired_goal, action, reward, next_state, done) in enumerate(self.episode):
             gs = self._sample_goals(i, strategy = 'future')
@@ -125,5 +127,5 @@ class AgentHer(Agent):
         self.critic.eval()
         self.target_actor.eval()
         self.target_critic.eval()
-        self.noise_sigma = 0.0  # Disable exploration noise
+        self.set_noise_sigma(0.0)  # Disable exploration noise
         self.toggle_sigma_decay = False  # Disable noise decay

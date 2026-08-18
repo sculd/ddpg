@@ -27,9 +27,11 @@ class Agent:
                  noise_sigma_final=0.2,
                  num_envs=1,
                  noise_seed=None,
+                 action_l2=0.0,
                  ):
         self.gamma = gamma
         self.tau = tau
+        self.action_l2 = action_l2  # L2 penalty on pre-clip actions (HER paper uses 1.0)
         self.noise = VectorizedOrnsteinUhlenbeckActionNoise(
             num_envs=max(1, num_envs),
             action_dim=n_actions,
@@ -98,8 +100,16 @@ class Agent:
         self.learn_actor(experiences)
         self._update_actor_network_parameters(self.tau)
 
+    @staticmethod
+    def _with_goal(states, goals):
+        # goal-conditioned agents (HER) store the goal separately; the networks
+        # take the concatenation [state, goal], as choose_action does.
+        return states if goals is None else torch.cat((states, goals), dim=1)
+
     def learn_critic(self, experiences):
         states, goals, actions, rewards, next_states, dones = experiences
+        states = self._with_goal(states, goals)
+        next_states = self._with_goal(next_states, goals)
 
         self.target_actor.eval()
         self.target_critic.eval()
@@ -122,6 +132,7 @@ class Agent:
 
     def learn_actor(self, experiences):
         states, goals, actions, rewards, next_states, dones = experiences
+        states = self._with_goal(states, goals)
 
         self.critic.eval()  # freeze it for actor update
         self.actor.train()
@@ -129,7 +140,7 @@ class Agent:
         mu = self.actor.forward(states)
         actor_q = self.critic.forward(states, mu)
         # negative sign to maximize q
-        actor_loss = torch.mean(-actor_q)
+        actor_loss = torch.mean(-actor_q) + self.action_l2 * torch.mean(mu ** 2)
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor.optimizer.step()
