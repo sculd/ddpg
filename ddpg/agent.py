@@ -98,8 +98,16 @@ class Agent:
         self.learn_actor(experiences)
         self._update_actor_network_parameters(self.tau)
 
+    @staticmethod
+    def _with_goal(states, goals):
+        # goal-conditioned agents (HER) store the goal separately; the networks
+        # take the concatenation [state, goal], as choose_action does.
+        return states if goals is None else torch.cat((states, goals), dim=1)
+
     def learn_critic(self, experiences):
         states, goals, actions, rewards, next_states, dones = experiences
+        states = self._with_goal(states, goals)
+        next_states = self._with_goal(next_states, goals)
 
         self.target_actor.eval()
         self.target_critic.eval()
@@ -122,6 +130,7 @@ class Agent:
 
     def learn_actor(self, experiences):
         states, goals, actions, rewards, next_states, dones = experiences
+        states = self._with_goal(states, goals)
 
         self.critic.eval()  # freeze it for actor update
         self.actor.train()

@@ -96,7 +96,7 @@ class AgentHer(Agent):
 
     def add_her_batch_to_memory(self):
         # HER: Use achieved goals as additional goals
-        memory_her = ReplayBuffer(self.memory.env_name, len(self.episode))
+        memory_her = ReplayBuffer(self.memory.env_name, len(self.episode) * N_HER_GOALS)
         her_rewards = []
         for i, (state, achieved_goal, desired_goal, action, reward, next_state, done) in enumerate(self.episode):
             gs = self._sample_goals(i, strategy = 'future')
