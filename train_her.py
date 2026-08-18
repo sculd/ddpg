@@ -5,10 +5,10 @@ import gymnasium as gym
 import gymnasium_robotics
 import numpy as np
 
-from ddpg.agner_her import AgentHer as Agent
+from ddpg.agent_her import AgentHer as Agent
 
 gym.register_envs(gymnasium_robotics)
-env_name = 'FetchReach-v3'
+env_name = 'FetchReach-v4'
 env = gym.make(env_name, max_episode_steps=100, render_mode=None) # "human"
 env = env.unwrapped
 
@@ -27,7 +27,7 @@ agent = Agent(n_inputs=env.observation_space['observation'].shape[0], n_actions=
               batch_size=128)
 if LOAD_MODELS:
     print("Loading pre-trained models...")
-    agent.load_models()
+    agent.load(load_memory=False)
 
 best_success_rate = 0.0
 best_avg_distance = float('inf')
@@ -101,7 +101,7 @@ for epoch in range(N_EPOCHS):
         improved = True
     
     if improved and SAVE_BEST_ONLY:
-        agent.save_models()
+        agent.save()
     
     agent.memory.reset()
 

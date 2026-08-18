@@ -5,10 +5,10 @@ import gymnasium as gym
 import gymnasium_robotics
 import numpy as np
 
-from ddpg.agner_her import AgentHer as Agent
+from ddpg.agent_her import AgentHer as Agent
 
 gym.register_envs(gymnasium_robotics)
-env_name = 'FetchReach-v3'
+env_name = 'FetchReach-v4'
 env = gym.make(env_name, max_episode_steps=50, render_mode="human")  # Reduced max steps to match training
 env = env.unwrapped
 
@@ -19,7 +19,7 @@ agent = Agent(n_inputs=env.observation_space['observation'].shape[0],
               env=env,
               noise_sigma=0.0,  # No noise during testing
               toggle_sigma_decay=False)
-agent.load_models()
+agent.load(load_memory=False)
 agent.set_testing_mode()  # Properly set networks to eval mode
 
 # Testing parameters
