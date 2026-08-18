@@ -13,3 +13,6 @@ video/
 wandb/
 train.csv
 eval.csv
+
+# her ablation logs (csv results are kept)
+exp_her/logs/

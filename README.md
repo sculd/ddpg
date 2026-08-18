@@ -60,6 +60,49 @@ Note: gymnasium >= 1.0 vector envs auto-reset in "next step" mode; the training 
 skips the bookkeeping transition at episode boundaries and bootstraps through time-limit
 truncations (done flag = terminated only).
 
+## FetchReach (sparse, goal-conditioned): DDPG + HER, and does pink noise matter?
+
+* HER: Hindsight Experience Replay
+  * https://arxiv.org/abs/1707.01495
+
+Question asked: my earlier HER attempt on FetchReach failed; the reward is a rare
+on/off signal, so is HER alone not enough — was pink-noise exploration the missing piece?
+
+Answer: **no**. On FetchReach the color of the exploration noise is irrelevant; what was
+missing was a paper-faithful DDPG (input normalization, lr 1e-3, action-L2 penalty,
+polyak 0.95, ...). `her/` is a clean DDPG+HER implementation (baselines-HER hyper-parameters,
+`future` relabelling with k=4 at sample time) with pluggable exploration noise
+(`--noise white|pink|red|ou`, colored noise from `sac/noise.py`).
+
+<img src="images/her_fetchreach_noise_ablation.png" width="100%">
+
+Findings (3 seeds each, eval = 10 deterministic episodes; a random policy already touches
+the goal in ~18% of episodes, so exploration is not the bottleneck on this task):
+
+* **Paper hyper-parameters + HER solve it in 2-5k env steps for every noise color** (white,
+  pink, red, OU); pink is indistinguishable from white. 100 %/100 % over 100 test episodes.
+* **Without HER** the same DDPG still solves it, just ~4x slower (100 % by ~15k steps),
+  as reported by Plappert et al. 2018 — FetchReach is the easy Fetch task.
+* **Legacy hyper-parameters (the old `train_her.py`: lr_actor 1e-5, tau 0.001, no
+  normalization, no action penalty) stay at 0 % for 150k steps with every noise color,
+  pink included.** Adding a single fix on top of them: obs/goal normalization -> 100 %,
+  lr 1e-3 -> 100 % (unstable), action-L2 -> ~90 %; while more exploration (30 % random
+  actions), target-Q clipping, batch size, gamma do nothing. The old code also dropped the
+  goal from the network input during learning (see git history of `ddpg/agent.py`), which
+  makes HER relabelling meaningless by construction.
+
+Take-away: pink noise helps when the *behaviour* needed to ever see reward is temporally
+extended (MountainCar rocking); FetchReach fails for optimisation reasons, so it does not.
+
+```
+$ python train_her.py --noise white            # paper setup
+$ python train_her.py --noise pink             # pink-noise exploration
+$ python train_her.py --noise white --no-her   # plain DDPG
+$ python train_her.py --preset legacy --noise pink --set normalize=True   # single-fix ablation
+$ python test_her.py --ckpt checkpoints/her_paper_white_her_seed0.pt [--render]
+$ python her/plot_results.py                   # regenerates the figure from exp_her/*.csv
+```
+
 ## Batchsize
 Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/abs/1509.02971), suggests a smaller batch size of 16, but my observation does not align with it.
 
