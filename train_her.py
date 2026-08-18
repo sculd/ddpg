@@ -22,9 +22,12 @@ agent = Agent(n_inputs=env.observation_space['observation'].shape[0], n_actions=
               env=env,
               noise_sigma=0.2,
               toggle_sigma_decay=True,
-              lr_actor=0.00001,
-              lr_critic=0.0001,
-              batch_size=128)
+              # DDPG+HER hyper-parameters from Andrychowicz et al. 2017 / baselines
+              lr_actor=0.001,
+              lr_critic=0.001,
+              tau=0.05,
+              batch_size=256,
+              action_l2=1.0)
 if LOAD_MODELS:
     print("Loading pre-trained models...")
     agent.load(load_memory=False)
@@ -102,8 +105,6 @@ for epoch in range(N_EPOCHS):
     
     if improved and SAVE_BEST_ONLY:
         agent.save()
-    
-    agent.memory.reset()
 
 print(f"\nTraining completed. Best success rate achieved: {best_success_rate:.2%}")
 print("\nEpoch history:")

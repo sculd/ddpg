@@ -27,9 +27,11 @@ class Agent:
                  noise_sigma_final=0.2,
                  num_envs=1,
                  noise_seed=None,
+                 action_l2=0.0,
                  ):
         self.gamma = gamma
         self.tau = tau
+        self.action_l2 = action_l2  # L2 penalty on pre-clip actions (HER paper uses 1.0)
         self.noise = VectorizedOrnsteinUhlenbeckActionNoise(
             num_envs=max(1, num_envs),
             action_dim=n_actions,
@@ -138,7 +140,7 @@ class Agent:
         mu = self.actor.forward(states)
         actor_q = self.critic.forward(states, mu)
         # negative sign to maximize q
-        actor_loss = torch.mean(-actor_q)
+        actor_loss = torch.mean(-actor_q) + self.action_l2 * torch.mean(mu ** 2)
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0)
         self.actor.optimizer.step()
