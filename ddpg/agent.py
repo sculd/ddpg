@@ -28,11 +28,14 @@ class Agent:
                  num_envs=1,
                  noise_seed=None,
                  action_l2=0.0,
+                 noise=None,
                  ):
         self.gamma = gamma
         self.tau = tau
         self.action_l2 = action_l2  # L2 penalty on pre-clip actions (HER paper uses 1.0)
-        self.noise = VectorizedOrnsteinUhlenbeckActionNoise(
+        # injectable exploration noise (any object with sample/set_sigma/reset);
+        # defaults to the OU process used so far
+        self.noise = noise if noise is not None else VectorizedOrnsteinUhlenbeckActionNoise(
             num_envs=max(1, num_envs),
             action_dim=n_actions,
             sigma=noise_sigma_initial,

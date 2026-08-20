@@ -33,9 +33,11 @@ class AgentHer(Agent):
                  noise_seed=None,
                  toggle_sigma_decay=True,
                  action_l2=0.0,
+                 noise=None,
+                 goal_dim=3,
                  ):
         super(AgentHer, self).__init__(
-            n_inputs+3, # state + goal
+            n_inputs+goal_dim, # state + goal
             n_actions, 
             env_name, 
             lr_actor=lr_actor, 
@@ -51,6 +53,7 @@ class AgentHer(Agent):
             num_envs=num_envs,
             noise_seed=noise_seed,
             action_l2=action_l2,
+            noise=noise,
         )
         self.env = env
         self.toggle_sigma_decay = toggle_sigma_decay
