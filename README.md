@@ -8,6 +8,8 @@
   * https://arxiv.org/abs/2010.01652
 * CN = Colored (Pink) Noise exploration
   * https://arxiv.org/abs/2206.05403
+* HER: Hindsight Experience Replay
+  * https://arxiv.org/abs/1707.01495
 
 Env: `BipedalWalker-v3`, and its `BipedalWalkerHardcore-v3` variant (much harder).
 
@@ -60,6 +62,15 @@ Note: gymnasium >= 1.0 vector envs auto-reset in "next step" mode; the training 
 skips the bookkeeping transition at episode boundaries and bootstraps through time-limit
 truncations (done flag = terminated only).
 
+## FetchReach-v4 (solved w/ HER)
+
+Reward: 0 within 5cm of the target, else -1. 
+
+HER allow gradual exploration with the sparse reward structure.
+
+<img src="images/animation_her_fetch_reach.gif" width="50%" height="50%">
+
+
 ## Batchsize
 Note: `Small batch deep reinforcement learning` [1509.02971](https://arxiv.org/abs/1509.02971), suggests a smaller batch size of 16, but my observation does not align with it.
 
@@ -81,6 +92,16 @@ the temporally correlated noise produces the coherent rocking that builds moment
 trained agent reaches the flag in ~70 steps, scoring ~95 per episode.
 
 <img src="images/animation_sac_cn_mountain_car.gif" width="50%" height="50%">
+
+#### HER (solved)
+
+`envs/goal_mountain_car_env.py`: achieved goal = position, desired goal = the flag
+
+HER relabels failures ("reached x = -0.3") into successes. the curriculum aligns with the physics - reaching further uphill *is* momentum building.
+
+95 % success by epoch 2 with plain white noise, which without HER never finds the goal.
+
+Caveat: `action_l2` must be 0 (otherwise it re-creates the "do nothing" optimum).
 
 ## Environments
 
