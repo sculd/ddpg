@@ -103,6 +103,15 @@ HER relabels failures ("reached x = -0.3") into successes. the curriculum aligns
 
 Caveat: `action_l2` must be 0 (otherwise it re-creates the "do nothing" optimum).
 
+## DreamerV3
+
+DreamerV3 (`dreamerv3/`, Hafner et al. 2023) learns a recurrent world model and trains its actor-critic purely on imagined latent rollouts, with no planning at act time.
+It solves BipedalWalker-v3 in ~120k steps (~10x fewer than SAC) and reaches 9000+ return on Humanoid-v5 in ~1.5M steps.
+
+Humanoid-v5 gait at 350k steps (return ~5.6k) vs 1.55M steps (return ~9.3k):
+
+<img src="images/animation_dreamerv3_humanoid_350k.gif" width="40%" height="40%"> <img src="images/animation_dreamerv3_humanoid_final.gif" width="40%" height="40%">
+
 ## Environments
 
 * Pytorch >= 2.5.1
