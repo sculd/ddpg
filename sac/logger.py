@@ -83,12 +83,26 @@ class MetersGroup(object):
         return data
 
     def _dump_to_csv(self, data):
+        if (self._csv_writer is not None
+                and not set(data.keys()) <= set(self._csv_writer.fieldnames)):
+            # a metric appeared after the header was written (e.g. losses that
+            # only start once updates begin): rewrite the file with a wider schema
+            self._fieldnames = set(self._csv_writer.fieldnames).union(data.keys())
+            self._csv_file.close()
+            with open(self._csv_file_name) as f:
+                old_rows = list(csv.DictReader(f))
+            self._csv_file = open(self._csv_file_name, 'w')
+            self._csv_writer = None
+        else:
+            old_rows = []
         if self._csv_writer is None:
             fieldnames = sorted(self._fieldnames.union(data.keys()))
             self._csv_writer = csv.DictWriter(self._csv_file,
                                               fieldnames=fieldnames,
                                               restval=0.0)
             self._csv_writer.writeheader()
+            for row in old_rows:
+                self._csv_writer.writerow(row)
         self._csv_writer.writerow(data)
         self._csv_file.flush()
 
