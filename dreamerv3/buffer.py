@@ -42,17 +42,39 @@ class SeqReplayBuffer:
     def __len__(self):
         return self.capacity if self.full else self.idx
 
-    def sample(self, batch_size):
-        """obs (H+1,B,obs), action (H,B,act), reward (H,B), terminated (H,B)."""
+    def _valid(self, cand):
+        H = self.horizon
+        ok = (cand >= 0) & (cand < len(self) - H)
+        cand = np.where(ok, cand, 0)
+        ok &= self.ep_id[cand] == self.ep_id[cand + H]
+        for o in range(H):
+            ok &= ~self.dummy[cand + o]
+        return ok
+
+    def sample(self, batch_size, end_frac=0.25):
+        """obs (H+1,B,obs), action (H,B,act), reward (H,B), terminated (H,B).
+
+        Uniform sampling over window *starts* under-represents each episode's
+        final transitions ~H-fold (a tail row appears in few valid windows),
+        which starves terminal-only rewards. end_frac of the batch is therefore
+        drawn from episode-end-aligned windows (last real row = the episode's
+        final transition); the official DreamerV3 gets the same coverage by
+        letting sequences cross episode boundaries."""
         n, H = len(self), self.horizon
         starts = np.empty(batch_size, dtype=np.int64)
         k = 0
+        n_end = int(batch_size * end_frac)
+        if n_end > 0:
+            ends = np.flatnonzero(self.dummy[:n]) - H     # start s: row s+H is dummy
+            if len(ends):
+                cand = ends[self._valid(ends)]
+                if len(cand):
+                    take = min(n_end, batch_size)
+                    starts[:take] = np.random.choice(cand, size=take)
+                    k = take
         while k < batch_size:
             cand = np.random.randint(0, n - H, size=4 * (batch_size - k))
-            ok = self.ep_id[cand] == self.ep_id[cand + H]
-            for o in range(H):
-                ok &= ~self.dummy[cand + o]
-            cand = cand[ok]
+            cand = cand[self._valid(cand)]
             take = min(len(cand), batch_size - k)
             starts[k:k + take] = cand[:take]
             k += take

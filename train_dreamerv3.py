@@ -58,6 +58,10 @@ def main():
     p.add_argument('--seed-steps', type=int, default=None)
     p.add_argument('--update-every', type=int, default=1)
     p.add_argument('--seq-len', type=int, default=32)
+    p.add_argument('--noise-beta', type=float, default=0.0,
+                   help='colored collection-noise exponent: 0 white, 1 pink, 2 red')
+    p.add_argument('--collect-min-std', type=float, default=0.0,
+                   help='collection-only floor on the exploration std (0 = off)')
     p.add_argument('--eval-every', type=int, default=2000)
     p.add_argument('--eval-episodes', type=int, default=5)
     p.add_argument('--max-episode-steps', type=int, default=None)
@@ -80,7 +84,9 @@ def main():
     obs_dim = flat_obs(s).shape[0]
     act_dim = env.action_space.shape[0]
     act_low, act_high = env.action_space.low, env.action_space.high
-    agent = DreamerV3(obs_dim, act_dim, seq_len=args.seq_len)
+    agent = DreamerV3(obs_dim, act_dim, seq_len=args.seq_len,
+                      noise_beta=args.noise_beta, noise_seq_len=T,
+                      collect_min_std=args.collect_min_std)
     seed_steps = args.seed_steps or max(1000, 5 * T)
 
     tag = args.tag or f'{args.env}_seed{args.seed}'
@@ -94,7 +100,7 @@ def main():
         w = csv.writer(f)
         w.writerow(['env_steps', 'episode', 'train_return', 'train_success',
                     'eval_return', 'eval_success', 'model_loss', 'kl',
-                    'actor_loss', 'critic_loss', 'imag_return', 'wall_s'])
+                    'actor_loss', 'critic_loss', 'imag_return', 'reward_max', 'wall_s'])
         s, _ = env.reset()
         agent.reset_episode()
         ep_ret, ep_reached, episode, losses = 0.0, 0.0, 0, {}
@@ -127,7 +133,7 @@ def main():
                     row = [step, episode, last_ret, last_reached, ev_ret, ev_succ,
                            losses.get('model', 0), losses.get('kl', 0),
                            losses.get('actor', 0), losses.get('critic', 0),
-                           losses.get('ret', 0), time.time() - t0]
+                           losses.get('ret', 0), losses.get('rmax', 0), time.time() - t0]
                     w.writerow([f'{x:.4f}' if isinstance(x, float) else x for x in row])
                     f.flush()
                     print(f'[{tag}] step {step:7d} ep {episode:4d} | train ret {last_ret:8.1f} '

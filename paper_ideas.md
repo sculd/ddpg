@@ -191,6 +191,211 @@ artefact in any case.
 
 ---
 
+### TD-MPC2 backbone (measured 2026-08-21)
+State-only TD-MPC2 reimplementation in `tdmpc2/` (paper defaults: SimNorm latents,
+symlog two-hot reward/Q heads, 5-Q ensemble, MPPI with policy prior, horizon 3),
+verified on the ladder:
+- Pendulum: eval return -191 +/- 69 (solved; validates the implementation).
+- FetchReach-v4 (goal flattened into obs, no HER): **100 % eval success by ~15k
+  steps, both seeds** - planning through the learned model handles the easy sparse
+  task without relabelling.
+- MountainCarContinuous: **fails exactly like model-free SAC** - returns ~ -0.2
+  (the "do nothing" optimum: it minimises the action penalty and never sees the
+  goal reward, so imagination has nothing to plan toward). Model-based planning
+  does NOT substitute for exploration; the model cannot conjure reward it has
+  never observed.
+This is the third anchor for H1 and tees up the open experiment: colored noise in
+the planner. Note the paper-grid subtlety - TD-MPC2's horizon is 3, so in-horizon
+colored MPPI sampling (the iCEM trick, Pinneri et al. 2020) is nearly meaningless;
+the correlation has to go into the *executed* action noise across env steps
+(colour the std-noise applied to the first planned action), and/or lengthen the
+planning horizon. Both are ~20-line changes in `tdmpc2/agent.py::act`.
+
+### DreamerV3 backbone (measured 2026-08-27/28)
+State-only DreamerV3 reimplementation in `dreamerv3/` (paper defaults: RSSM with
+32x32 categorical latents, symlog two-hot reward/critic heads, KL balancing with
+free bits, imagination-trained actor-critic, REINFORCE with percentile return
+normalisation; no planning at act time), verified on the ladder
+(curves in `exp_dreamerv3/`, figure `images/dreamerv3_curves.png`):
+- Pendulum: solved by ~14k steps (-146 over 20 eval episodes).
+- BipedalWalker-v3: solved (+303) at ~120k steps, ~10x fewer than SAC.
+- BipedalWalkerHardcore-v3: +205 (20 eval episodes) at 1M steps, still rising -
+  imagination helps credit assignment but does not solve rare-event exploration.
+- Humanoid-v5: eval ~9000 by 1.5M steps; SAC-FORK on the same env plateaus at
+  ~480 over 6M steps (entropy collapse at 17-DoF + FORK threshold tuned for
+  BipedalWalker; `images/humanoid_dreamerv3_vs_sacfork.png`).
+- MountainCarContinuous: fails exactly like SAC and TD-MPC2 (success 0 at 130k).
+- **FetchReach-v4 (goal flattened, no HER): the key observation.** Stuck at the
+  -50 floor with success 0 for ~35k steps - the reward head, trained only on
+  reward it has seen, predicts -1 everywhere, so imagination gives the actor no
+  gradient and the critic's imagined return just slides toward the discounted
+  -1-forever asymptote (watched live: -113 -> -224 -> -279 -> -324). Once a few
+  random successes entered replay it broke out and converged to -3.8 / 100 %
+  within ~15k steps. TD-MPC2 solved the same setup from 5k steps.
+
+**Why this matters for Idea 1: "model-based" is not one category.** The three
+backbones now span three mechanisms on the same tasks:
+DDPG+HER *manufactures* reward signal by relabelling; TD-MPC2's MPPI *searches*
+at act time for reward the model knows about; DreamerV3's imagination only
+*amplifies* reward already present in replay. Planning-based and
+imagination-based world-model agents sit on opposite sides of the coverage
+boundary. The coverage predictor generalises: early-policy achieved-goal
+coverage / success density should predict DreamerV3's stall duration,
+TD-MPC2's immunity, and HER's benefit with a single mechanism. The reward
+head's predicted imagined return over training is a direct, cheap diagnostic
+of "does the learning signal exist in the data yet" (log it per eval).
+
+New cells this opens (roughly increasing risk):
+1. **Colored collection noise in DreamerV3** (~20 lines in
+   `dreamerv3/agent.py::act`: colour the actor's sampling noise across env
+   steps). Does pink noise shorten/eliminate the FetchReach stall and fix
+   MountainCar - i.e. does correlated noise help *because it feeds the reward
+   model*, a different mechanism than helping a replay critic? No published
+   work combines colored exploration noise with Dreamer-style agents
+   (checked 2026-08-28; re-check before submitting). Completes the
+   3-backbone x colour x HER grid.
+2. **HER x DreamerV3**: relabel goals in replayed sequences (reward is
+   computable from achieved/desired goal) so the reward head learns from
+   hindsight successes; compare against the stall baseline. Cheap and
+   directly measurable via stall length.
+   *Literature check (2026-08-28): the model-based-hindsight idea is taken in
+   general form - MHER (arXiv 2107.00306) relabels with goals from virtual
+   model rollouts, Imaginary HER (arXiv 2110.02414) combines model-based
+   imagination + curiosity + HER; both on DDPG-style backbones with separate
+   dynamics models, on Fetch. GCHR (2508.06108) is the recent hindsight-
+   regularisation line. Novelty therefore narrows to: (a) the RSSM/Dreamer
+   instantiation, where reward comes from a learned head rather than being
+   computed, and (b) the reward-head bootstrap-gap mechanism we measured -
+   position any paper as explaining WHEN model-based hindsight is needed,
+   not as inventing it. Also found: DreamerV3-XP (arXiv 2510.21418),
+   uncertainty-driven exploration in DreamerV3 - cite as the smart-exploration
+   reference point for cell 1.*
+3. **Hindsight in imagination**: relabel goals inside imagined rollouts with
+   an analytic goal-distance reward instead of the learned head. Higher
+   novelty/risk; check the imagined-goal literature (Imagined Goals /
+   PlaNet-lineage) first - and note MHER already relabels *with* imagined
+   states on real transitions; the inverse (analytic reward inside the
+   imagination that trains the actor) appears open.
+**Cell 1 experimental design (drafted 2026-08-28).**
+- *Intervention*: in `dreamerv3/agent.py::act`, replace the i.i.d. eps in
+  u = mu + std * eps with a per-episode colored-noise sequence (reuse
+  `sac/noise.py`), normalised to unit marginal variance per dim so only the
+  temporal correlation changes, reset in `reset_episode()`. Everything else
+  (world-model training, imagination, eval mean action, seed phase's uniform
+  random actions) untouched. Dreamer is off-policy and the model conditions
+  on executed actions, so no correction terms - a pure behaviour-policy
+  ablation. beta=0 recovers the current agent exactly.
+- *Pre-registered hypotheses*:
+  H1 beta>0 shortens time-to-first-success on coverage-limited tasks
+  (MountainCar, GoalMountainCar, Push) and does not hurt dense controls
+  (Pendulum, BipedalWalker).
+  H2 (the Dreamer-specific mechanism claim): the benefit is mediated by the
+  reward model - stall length tracks time-to-first-success, and post-stall
+  convergence rate is colour-independent. Distinguishes "pink feeds the
+  reward head" from the generic "pink helps SAC" result.
+  H3: the untrained-policy coverage probe predicts the per-task gain
+  (same predictor as Idea 1, now spanning backbones).
+- *Metrics*: time-to-first-success in replay (survival analysis - runs that
+  never succeed are censored, the right stats for MountainCar); stall length
+  via the reward-head diagnostic (log per eval: max decoded reward-head
+  output over eval states + mean imagined return - we watched this slide
+  -113 -> -324 on FetchReach); eval success/return; world-model health
+  (recon, KL) to catch the confound that correlated actions reduce data
+  diversity and hurt the model.
+- *Grid*: beta in {0, 0.5, 1, 2} x {MountainCarContinuous, FetchReach} x
+  10 seeds first (80 runs, 1-2 h each, 2-3 concurrent on the one GPU
+  ~ under two weeks); then Push + GoalMountainCar + dense controls at 5
+  seeds. FetchReach's stall length is a continuous outcome - much better
+  statistical power than binary solve rates.
+- *Completing the figure*: TD-MPC2 with colored *executed* noise (the
+  teed-up ~20-line change) gives the 3-backbone x colour comparison;
+  DreamerV3-XP as the uncertainty-exploration reference.
+- *Pitfalls*: keep effective noise magnitude matched across beta (unit
+  variance handles it, but min_std=0.1 floors the scale - report it);
+  episode length T matters (the MountainCar T=200 vs T=1000 flip already
+  measured); keep the uniform-random seed phase identical across cells.
+
+**Pilot measured (2026-08-28/29, FetchReach, beta {0,1} x 3 seeds, 50k steps,
+eval every 2.5k; breakout = first eval success >= 0.6 sustained).**
+white: 37.5k / 45k / censored; pink: 35k / 37.5k / 50k (borderline).
+Distributions overlap completely - **null on FetchReach, as H1/H3 predict**:
+the repo's HER study already showed FetchReach is not coverage-limited
+(random policy touches the goal ~18 % of episodes), so colour has nothing to
+buy; the stall is success-*density* in replay, which correlation does not
+change. The informative colour test is the coverage-limited tasks -
+MountainCar beta {0,1} x 3 seeds launched next. Harness notes: the
+reward_max stall diagnostic works as a leading indicator (reads ~0 when a
+success is in the sampled batch, well before eval moves) but is single-batch
+noisy - switch to a running max between evals before the full grid.
+**MountainCar pilot + the amplitude-collapse finding (2026-08-29).**
+White beta=0 x 3 seeds: flat zero for all 130k steps (matches the earlier
+run). Pink beta=1 x 3 seeds: ALSO zero goal touches in training - yet the
+untrained coverage probe (H3's probe, 30 episodes each) shows pink reaching
+the flag 8/30 with best position +0.47 vs white 0/30 / best +0.09. The
+resolution, verified by loading trained checkpoints: by the first evals the
+actor has collapsed to |mu| ~ 0.00 with std pinned at the 0.1 floor for BOTH
+colours - the action-penalty gradient through the reward head crushes the
+exploration amplitude within the first few thousand updates, closing the
+window before pink's ~4-episode expected hitting time. **Correlation only
+matters if amplitude survives.** This also explains the SAC-CN vs Dreamer
+discrepancy: SAC's entropy target holds sigma up; Dreamer's 3e-4 entropy
+bonus cannot. The experimental surface is 2D: correlation beta x collection
+amplitude. Follow-up 2x2 launched (beta {0,1} x collect_min_std 0.5, 2
+seeds, collection-only std floor - training/eval untouched): prediction is
+pink+floor solves, white+floor fails (white coverage is 0/30 even untrained
+at wide std), either alone fails - a clean interaction effect and the
+candidate headline figure.
+
+**Third bottleneck found: terminal-transition undersampling (2026-08-29).**
+Probing the collapsed actor with the floor showed pink+floor0.5 touches the
+goal 6/20 episodes (floor1.0: 15/20; red beta=2 floor1.0: 9/20) - so the
+running pink+floor lanes DID explore successfully, yet the reward head
+stayed at the floor. Cause: MountainCar's +100 sits on the episode's FINAL
+transition, and uniform-over-starts window sampling in the within-episode
+SeqReplayBuffer gives a tail row ~H=32x fewer valid windows than an interior
+row - terminal-only rewards are undersampled ~32x (~0.5 % of batches by
+130k). Official DreamerV3 avoids this by letting sequences cross episode
+boundaries. This cleanly separates FetchReach (non-terminal successes, no
+bias, breakout worked) from MountainCar (terminal-only reward, starved).
+Fix implemented in `dreamerv3/buffer.py::sample`: end_frac=0.25 of each
+batch drawn from episode-end-aligned windows (unit-tested: terminal reward
+in 97 % of batches vs ~4.5 % before). Fixed-buffer 2x2 rerun queued (mcfx_
+tags, pink-first). The MountainCar causal chain is now three verified
+bottlenecks: (1) amplitude collapse blocks exploration; (2) floor+pink fixes
+exploration; (3) terminal undersampling starves the reward head anyway.
+Each was found by a cheap targeted probe - the probes themselves are the
+paper's methodological through-line.
+
+**Final 2x2 result, fixed buffer (2026-08-29, mcfx_ runs, 130k steps).**
+- pink+floor s0: first eval > 90 at **10k steps**, best +96.2, ends +92.5 -
+  SOLVED. s1: reaches +97.2 (first > 90 at 20k) but oscillates between
+  solved and full-throttle-no-goal (-98) - the actor overshoots the
+  action-cost/goal tradeoff; reward head stays at ~+100 throughout, so this
+  is post-breakout REINFORCE instability, not exploration.
+- white+floor s0/s1: flat 0.0 for all 130k steps, both seeds.
+Combined table across all MountainCar cells (130k budget, DreamerV3):
+  plain / pink-only / floor-only(white+floor) / old-buffer pink+floor: all 0
+  fixed-buffer pink+floor: solves in 10-20k steps.
+**Correlation, amplitude, and terminal-reward sampling are each necessary
+and only jointly sufficient.** First DreamerV3 configuration in this repo to
+solve MountainCarContinuous. Follow-ups for the full grid: (a) stabilise the
+actor post-breakout (entropy schedule or lower actor lr - s1's oscillation);
+(b) ablate end_frac on FetchReach (near-end successes are undersampled there
+too - the stall should shorten); (c) 10 seeds, plus beta 0.5/2 columns; (d)
+report the probe -> outcome ladder as the method (each bottleneck was found
+by a <5 min targeted probe).
+
+Implementation (uncommitted as of 2026-08-29): noise_beta/noise_seq_len +
+collect_min_std kwargs, --noise-beta / --collect-min-std flags, buffer
+end_frac terminal-aligned sampling (colored eps via `sac/noise.py::ColoredNoiseProcess`,
+lag-1 action autocorr 0.54 pink vs 0.14 white verified).
+
+Practicals: this implementation turns Fetch-scale runs around in <2 h and
+Humanoid overnight on one GPU, so a 5-10 seed grid is feasible. Secondary
+seeds (a line, not a paper): SAC entropy collapse at 17-DoF with alpha pinned
+(implementation-study material); the Hardcore rare-event result as
+corroborating evidence for the mechanism taxonomy.
+
 ## Idea 2: Temporally correlated intrinsic motivation
 
 **Question.** Pink action noise produces coherent exploration; RND-style bonuses do

@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from dreamerv3.buffer import SeqReplayBuffer
 from dreamerv3.common import ReturnScale, categorical_kl, soft_ce, symlog, twohot_decode
 from dreamerv3.model import Actor, WorldModel, make_critic
+from sac.noise import ColoredNoiseProcess
 
 
 def lambda_return(reward, cont, value, gamma, lam):
@@ -38,7 +39,8 @@ class DreamerV3:
                  dyn_coef=0.5, rep_coef=0.1, free_bits=1.0,
                  entropy_coef=3e-4, slow_tau=0.02,
                  model_clip=1000.0, ac_clip=100.0,
-                 buffer_capacity=1_000_000, device=None):
+                 buffer_capacity=1_000_000, device=None,
+                 noise_beta=0.0, noise_seq_len=1000, collect_min_std=0.0):
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.obs_dim, self.action_dim = obs_dim, action_dim
         self.seq_len, self.batch_size, self.imag_horizon = seq_len, batch_size, imag_horizon
@@ -59,6 +61,13 @@ class DreamerV3:
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=ac_lr)
         self.ret_scale = ReturnScale()
         self.buffer = SeqReplayBuffer(buffer_capacity, obs_dim, action_dim, seq_len)
+        # colored collection noise (Eberhard et al., ICLR 2023): replaces the
+        # i.i.d. eps in u = mu + std*eps at act time only; beta=0 is unchanged
+        self.noise = (ColoredNoiseProcess(noise_beta, action_dim, noise_seq_len)
+                      if noise_beta > 0 else None)
+        # collection-only exploration-std floor: keeps behaviour-policy amplitude
+        # from collapsing with the learned std; training and eval are untouched
+        self.collect_min_std = collect_min_std
         self.reset_episode()
 
     # ---------------- acting ----------------
@@ -66,6 +75,8 @@ class DreamerV3:
         self._h = None
         self._z = None
         self._a = None
+        if self.noise is not None:
+            self.noise.reset()
 
     @torch.no_grad()
     def act(self, obs, eval_mode=False):
@@ -78,6 +89,15 @@ class DreamerV3:
         feat = torch.cat([self._h, self._z], -1)
         if eval_mode:
             a = self.actor.mean_action(feat)
+        elif self.noise is not None or self.collect_min_std > 0:
+            mu, std = self.actor._params(feat)
+            if self.collect_min_std > 0:
+                std = std.clamp_min(self.collect_min_std)
+            if self.noise is not None:
+                eps = torch.as_tensor(self.noise.sample(), device=self.device).unsqueeze(0)
+            else:
+                eps = torch.randn_like(mu)
+            a = torch.tanh(mu + std * eps)
         else:
             a, _ = self.actor.sample(feat)
         self._a = a
@@ -163,10 +183,13 @@ class DreamerV3:
             for p, sp in zip(self.critic.parameters(), self.critic_slow.parameters()):
                 sp.lerp_(p, self.slow_tau)
 
+        with torch.no_grad():
+            # stall diagnostic: has the reward head seen anything above the floor?
+            reward_max = twohot_decode(self.model.reward(feat[1:])).max().item()
         return {'model': model_loss.item(), 'obs': obs_loss.item(),
                 'kl': dyn_loss.item(), 'reward': reward_loss.item(),
                 'actor': actor_loss.item(), 'critic': critic_loss.item(),
-                'ret': ret.mean().item()}
+                'ret': ret.mean().item(), 'rmax': reward_max}
 
     # ---------------- io ----------------
     def save(self, path):
