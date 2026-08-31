@@ -101,8 +101,9 @@ def main():
     with open(csv_path, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['env_steps', 'episode', 'train_return', 'train_success',
-                    'eval_return', 'eval_success', 'model_loss', 'kl',
-                    'actor_loss', 'critic_loss', 'imag_return', 'reward_max', 'wall_s'])
+                    'eval_return', 'eval_success', 'eval_return_policy', 'eval_success_policy',
+                    'model_loss', 'kl', 'actor_loss', 'critic_loss', 'imag_return',
+                    'reward_max', 'wall_s'])
         s, _ = env.reset()
         agent.reset_episode()
         ep_ret, ep_reached, episode, losses = 0.0, 0.0, 0, {}
@@ -131,8 +132,16 @@ def main():
                 if step >= next_eval:
                     next_eval += args.eval_every
                     ev_ret, ev_succ = evaluate(eval_env, agent, args.eval_episodes)
+                    if args.plan:
+                        # search gap: same model/critic, policy-only acting
+                        agent.use_plan = False
+                        evp_ret, evp_succ = evaluate(eval_env, agent, args.eval_episodes)
+                        agent.use_plan = True
+                    else:
+                        evp_ret, evp_succ = ev_ret, ev_succ
                     agent.reset_episode()  # eval left stale recurrent state
                     row = [step, episode, last_ret, last_reached, ev_ret, ev_succ,
+                           evp_ret, evp_succ,
                            losses.get('model', 0), losses.get('kl', 0),
                            losses.get('actor', 0), losses.get('critic', 0),
                            losses.get('ret', 0), losses.get('rmax', 0), time.time() - t0]
