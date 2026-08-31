@@ -62,6 +62,8 @@ def main():
                    help='colored collection-noise exponent: 0 white, 1 pink, 2 red')
     p.add_argument('--collect-min-std', type=float, default=0.0,
                    help='collection-only floor on the exploration std (0 = off)')
+    p.add_argument('--plan', action='store_true',
+                   help='act-time MPPI search through the RSSM (TD-MPC2 style)')
     p.add_argument('--eval-every', type=int, default=2000)
     p.add_argument('--eval-episodes', type=int, default=5)
     p.add_argument('--max-episode-steps', type=int, default=None)
@@ -86,7 +88,7 @@ def main():
     act_low, act_high = env.action_space.low, env.action_space.high
     agent = DreamerV3(obs_dim, act_dim, seq_len=args.seq_len,
                       noise_beta=args.noise_beta, noise_seq_len=T,
-                      collect_min_std=args.collect_min_std)
+                      collect_min_std=args.collect_min_std, use_plan=args.plan)
     seed_steps = args.seed_steps or max(1000, 5 * T)
 
     tag = args.tag or f'{args.env}_seed{args.seed}'

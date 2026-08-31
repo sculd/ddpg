@@ -396,6 +396,30 @@ seeds (a line, not a paper): SAC entropy collapse at 17-DoF with alpha pinned
 (implementation-study material); the Hardcore rare-event result as
 corroborating evidence for the mechanism taxonomy.
 
+### Dreamer+search hybrid (measured 2026-08-30)
+Added act-time MPPI through the RSSM prior to DreamerV3 (`--plan`:
+TD-MPC2-style search - 512 samples + 24 actor-seeded rollouts, horizon 5,
+reward-head + continue-head scoring, critic tail value, warm start; training
+unchanged; ~28 ms/act). Motivation: the search-vs-amplify mechanism split -
+search should consume modeled reward immediately, skipping the slow
+policy-amplification phase of the FetchReach stall.
+
+FetchReach, plan vs plain, 3 seeds, identical current code (end_frac buffer):
+breakouts plan {20k, 32.5k, 35k} vs plain {30k, 42.5k, 45k} - median 32.5k
+vs 42.5k, search earlier on 2/3 seeds (both by ~10-22k), later on one (5k).
+Final returns a wash ({-1.8,-1.8,-9.8} vs {-2.6,-2.8,-9.2}); no censored
+runs in either arm. Directionally supports the mechanism but n=3 and one
+reversal - needs the 10-seed grid before claiming. Side result: the plain
+arm doubles as the end_frac-on-FetchReach ablation - old-buffer white
+breakouts were {37.5k, 45k, censored}, new-buffer {30k, 42.5k, 45k}:
+modest improvement, right direction, within noise at n=3.
+
+Measurement lesson: the monotone reward_max diagnostic saturates to ~0
+immediately on FetchReach (seed episodes already contain ~18 % successes),
+so the two-phase stall decomposition wasn't measurable as designed; a
+sharper phase metric would be the reward head's prediction at goal-adjacent
+states or the critic's value at episode-start states, logged per eval.
+
 ## Idea 2: Temporally correlated intrinsic motivation
 
 **Question.** Pink action noise produces coherent exploration; RND-style bonuses do

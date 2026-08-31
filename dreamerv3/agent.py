@@ -40,7 +40,10 @@ class DreamerV3:
                  entropy_coef=3e-4, slow_tau=0.02,
                  model_clip=1000.0, ac_clip=100.0,
                  buffer_capacity=1_000_000, device=None,
-                 noise_beta=0.0, noise_seq_len=1000, collect_min_std=0.0):
+                 noise_beta=0.0, noise_seq_len=1000, collect_min_std=0.0,
+                 use_plan=False, plan_horizon=5, plan_samples=512, plan_elites=64,
+                 plan_iters=4, plan_pi_trajs=24, plan_temperature=0.5,
+                 plan_min_std=0.05, plan_max_std=1.0):
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.obs_dim, self.action_dim = obs_dim, action_dim
         self.seq_len, self.batch_size, self.imag_horizon = seq_len, batch_size, imag_horizon
@@ -68,6 +71,14 @@ class DreamerV3:
         # collection-only exploration-std floor: keeps behaviour-policy amplitude
         # from collapsing with the learned std; training and eval are untouched
         self.collect_min_std = collect_min_std
+        # act-time MPPI search through the RSSM prior (TD-MPC2 style), seeded by
+        # the imagination-trained actor; training is unchanged
+        self.use_plan = use_plan
+        self.plan_horizon, self.plan_samples, self.plan_elites = plan_horizon, plan_samples, plan_elites
+        self.plan_iters, self.plan_pi_trajs = plan_iters, plan_pi_trajs
+        self.plan_temperature = plan_temperature
+        self.plan_min_std, self.plan_max_std = plan_min_std, plan_max_std
+        self._rmax = float('-inf')   # lifetime max decoded reward-head output
         self.reset_episode()
 
     # ---------------- acting ----------------
@@ -75,8 +86,54 @@ class DreamerV3:
         self._h = None
         self._z = None
         self._a = None
+        self._prev_mean = None
         if self.noise is not None:
             self.noise.reset()
+
+    @torch.no_grad()
+    def _plan_value(self, h, z, actions):
+        """actions: (H, N, act). Discounted model-rollout return + critic tail."""
+        G, disc = 0.0, 1.0
+        for t in range(actions.shape[0]):
+            h, z = self.model.rssm.img_step(h, z, actions[t])
+            feat = torch.cat([h, z], -1)
+            G = G + disc * twohot_decode(self.model.reward(feat))
+            disc = disc * self.gamma * torch.sigmoid(self.model.cont(feat).squeeze(-1))
+        return G + disc * twohot_decode(self.critic(feat))
+
+    @torch.no_grad()
+    def _plan(self, h, z, eval_mode):
+        H, N, E = self.plan_horizon, self.plan_samples, self.plan_elites
+        A = self.action_dim
+        # policy-prior trajectories from the imagination-trained actor
+        pi_actions = torch.empty(H, self.plan_pi_trajs, A, device=self.device)
+        ph, pz = h.repeat(self.plan_pi_trajs, 1), z.repeat(self.plan_pi_trajs, 1)
+        for t in range(H):
+            a, _ = self.actor.sample(torch.cat([ph, pz], -1))
+            pi_actions[t] = a
+            ph, pz = self.model.rssm.img_step(ph, pz, a)
+        mean = torch.zeros(H, A, device=self.device)
+        if self._prev_mean is not None:
+            mean[:-1] = self._prev_mean[1:]
+        std = torch.full((H, A), self.plan_max_std, device=self.device)
+        hs = h.repeat(N + self.plan_pi_trajs, 1)
+        zs = z.repeat(N + self.plan_pi_trajs, 1)
+        for _ in range(self.plan_iters):
+            noise = torch.randn(H, N, A, device=self.device)
+            actions = (mean.unsqueeze(1) + std.unsqueeze(1) * noise).clamp(-1, 1)
+            actions = torch.cat([actions, pi_actions], dim=1)
+            value = self._plan_value(hs, zs, actions)
+            elite_idx = value.topk(E).indices
+            elite_v, elite_a = value[elite_idx], actions[:, elite_idx]
+            w = torch.softmax(self.plan_temperature * (elite_v - elite_v.max()), dim=0)
+            mean = (w[None, :, None] * elite_a).sum(1)
+            std = ((w[None, :, None] * (elite_a - mean.unsqueeze(1)) ** 2).sum(1)
+                   ).sqrt().clamp(self.plan_min_std, self.plan_max_std)
+        self._prev_mean = mean
+        a = mean[0]
+        if not eval_mode:
+            a = (a + std[0] * torch.randn_like(a)).clamp(-1, 1)
+        return a.unsqueeze(0)
 
     @torch.no_grad()
     def act(self, obs, eval_mode=False):
@@ -87,7 +144,9 @@ class DreamerV3:
         emb = self.model.encoder(symlog(obs))
         self._h, self._z, _, _ = self.model.rssm.obs_step(self._h, self._z, self._a, emb)
         feat = torch.cat([self._h, self._z], -1)
-        if eval_mode:
+        if self.use_plan:
+            a = self._plan(self._h, self._z, eval_mode)
+        elif eval_mode:
             a = self.actor.mean_action(feat)
         elif self.noise is not None or self.collect_min_std > 0:
             mu, std = self.actor._params(feat)
@@ -184,8 +243,11 @@ class DreamerV3:
                 sp.lerp_(p, self.slow_tau)
 
         with torch.no_grad():
-            # stall diagnostic: has the reward head seen anything above the floor?
-            reward_max = twohot_decode(self.model.reward(feat[1:])).max().item()
+            # stall diagnostic: lifetime max decoded reward-head output (monotone),
+            # so a single batch without successes cannot mask an earlier breakout
+            self._rmax = max(self._rmax,
+                             twohot_decode(self.model.reward(feat[1:])).max().item())
+            reward_max = self._rmax
         return {'model': model_loss.item(), 'obs': obs_loss.item(),
                 'kl': dyn_loss.item(), 'reward': reward_loss.item(),
                 'actor': actor_loss.item(), 'critic': critic_loss.item(),
