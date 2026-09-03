@@ -420,6 +420,82 @@ so the two-phase stall decomposition wasn't measurable as designed; a
 sharper phase metric would be the reward head's prediction at goal-adjacent
 states or the critic's value at episode-start states, logged per eval.
 
+Search-gap logging added (commit a0fd7ef): --plan runs evaluate both with
+the planner and policy-only per eval point.
+
+*Literature check (2026-08-31).* Hamrick et al., "On the role of planning
+in model-based deep RL" (ICLR 2021, arXiv 2011.04021) is the anchor: in
+MuZero, planning helps mainly through TRAINING (policy targets + data
+distribution); eval-time search adds little in most envs - our attribution
+result is the continuous-control/RSSM echo of their conclusion, so the raw
+"search is scaffolding" claim is a replication, not a novelty. Dream-MPC
+(arXiv 2605.04568, 2026) already builds nearly this hybrid (gradient-based
+MPC over Dreamer-style imagination with policy candidates + uncertainty);
+DC-MPC (2503.00653) is decision-time planning over discrete-codebook world
+models. Positioning that remains open: (a) the search-gap TIME-COURSE as a
+measured curve over training (Hamrick reports endpoints, not dynamics);
+(b) the sparse-reward mechanism link - search consumes modeled reward and
+skips the amplification phase, tied to the seen->sampled->modeled->amplified
+pipeline; (c) winner's-curse handling for MPPI through stochastic
+categorical latents (stochastic-MuZero territory, unexplored for
+continuous RSSM search). Cite Hamrick prominently; do not write the
+systems paper.
+
+### Overnight grid results (2026-09-01/02)
+**MountainCar 2x2 seed expansion (fixed buffer):** pink+floor now 6/6 seeds
+cross +90 (first>90 at 10k, 10k, 20k, 20k, 50k, 70k); white+floor 0/4 flat.
+The interaction claim holds at n=6 vs n=4. Post-breakout oscillation is the
+open issue: only ~half the seeds END above +90 (best values 91-97 all).
+
+**Search-gap time-course (fgap, FetchReach, 3 seeds):** the predicted arc is
+real - gap ~0 during the stall (nothing to exploit), spikes mid-transition
+(+12.4 at 35k s0; +9.6 at 40k s1; s2 late-breaking, +9.6 at cutoff), and
+collapses to 0+-2 at convergence. The dynamics version of Hamrick 2021's
+endpoint claim. Eval noise gives occasional negative blips mid-transition
+(-14 once); 5-episode evals - use 10+ in the grid.
+
+**MountainCar + search cell (mcplan_s0, plan+pink+floor):** search reached
++94.1 at the FIRST eval (10k) while policy-only read -99.8 (gap +194) - on
+a terminal-reward task the planner converts the reward model into behaviour
+essentially instantly. But unlike FetchReach the gap does NOT die: the
+actor's oscillation keeps reopening it (gaps +40-53 during policy collapse
+phases; near 0 when the policy is momentarily good). TWO GAP REGIMES:
+transient (stable policy learning, FetchReach) vs persistent-under-
+instability (MountainCar) - search acts as a safety net exactly when the
+amortized policy degrades. This regime distinction is a new observation to
+build on; it also means search partially substitutes for actor
+stabilisation.
+
+### Positioning notes + paper skeleton (2026-09-01 overnight)
+Literature: policy entropy collapse is a named phenomenon (Cui et al.,
+"The Entropy Mechanism of RL", arXiv 2505.22617; also 2510.08141 noting the
+inevitable reward-entropy trade-off of entropy-regularized fixes). Our
+angle: the collection-only std floor ESCAPES that trade-off - it never
+touches the learned objective (off-policy), only the behaviour policy;
+"behaviour-amplitude protection != entropy regularisation". The
+terminal-window replay bias appears unnamed - closest is success/fail
+episode imbalance in world models and Curious Replay (2306.15934); cite as
+adjacent, claim the position-within-window bias.
+
+Draft skeleton - "Why exploration fails in imagination: three bottlenecks
+and their probes" (or: "When does temporally correlated exploration help
+world-model agents?"):
+1. Claim: sparse-reward failure in imagination-trained agents decomposes
+   into seen (coverage) / sampled (replay) / modeled (reward head) /
+   amplified (policy) stages; each has a cheap pre-hoc probe and a targeted
+   fix; each is individually necessary on MountainCar.
+2. Figures: (i) coverage probe vs training outcome across tasks/backbones
+   (rank correlation); (ii) the MountainCar 2x2(x2 buffers) solve table;
+   (iii) search-gap time-course on FetchReach (planner vs policy on the
+   same model) - the Hamrick-in-continuous-control dynamics figure;
+   (iv) terminal-window bias: P(terminal in batch) vs end_frac + its
+   causal effect.
+3. Baselines/anchors already measured: SAC-CN, DDPG+HER 2x2, TD-MPC2,
+   DreamerV3 plain/pink/floor/fixed-buffer/search.
+4. Cite prominently: Hamrick 2021 (search helps via training), Eberhard
+   2023 (pink noise), MHER/IHER (model-based hindsight), entropy-collapse
+   line, Curious Replay. Venues: RLC / TMLR.
+
 ## Idea 2: Temporally correlated intrinsic motivation
 
 **Question.** Pink action noise produces coherent exploration; RND-style bonuses do
